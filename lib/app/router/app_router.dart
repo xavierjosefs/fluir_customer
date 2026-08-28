@@ -2,17 +2,18 @@ import 'package:go_router/go_router.dart';
 
 import '../../features/account/presentation/screens/account_placeholder_screen.dart';
 import '../../features/activity/presentation/screens/activity_placeholder_screen.dart';
-import '../../features/authentication/presentation/screens/auth_entry_screen.dart';
 import '../../features/authentication/presentation/screens/auth_success_screen.dart';
 import '../../features/authentication/presentation/screens/code_sent_screen.dart';
 import '../../features/authentication/presentation/screens/otp_screen.dart';
 import '../../features/authentication/presentation/screens/phone_number_screen.dart';
 import '../../features/authentication/presentation/widgets/auth_flow_coordinator.dart';
-import '../../features/home/presentation/screens/home_placeholder_screen.dart';
+import '../../features/home/presentation/screens/home_screen.dart';
+import '../../features/onboarding/presentation/screens/onboarding_screen.dart';
 import '../../features/payments/presentation/screens/payments_placeholder_screen.dart';
 import 'app_shell.dart';
 
 abstract final class AppRoutes {
+  static const onboarding = '/onboarding';
   static const auth = '/auth';
   static const home = '/inicio';
   static const activity = '/actividad';
@@ -21,14 +22,18 @@ abstract final class AppRoutes {
 }
 
 final GoRouter appRouter = GoRouter(
-  initialLocation: AppRoutes.auth,
+  initialLocation: AppRoutes.onboarding,
   routes: [
+    GoRoute(
+      path: AppRoutes.onboarding,
+      builder: (context, state) => const OnboardingScreen(),
+    ),
     ShellRoute(
       builder: (context, state, child) => AuthFlowCoordinator(child: child),
       routes: [
         GoRoute(
           path: AppRoutes.auth,
-          builder: (context, state) => const AuthEntryScreen(),
+          redirect: (context, state) => AppRoutes.onboarding,
         ),
         GoRoute(
           path: '${AppRoutes.auth}/phone',
@@ -56,7 +61,7 @@ final GoRouter appRouter = GoRouter(
           routes: [
             GoRoute(
               path: AppRoutes.home,
-              builder: (context, state) => const HomePlaceholderScreen(),
+              builder: (context, state) => const HomeScreen(),
             ),
           ],
         ),

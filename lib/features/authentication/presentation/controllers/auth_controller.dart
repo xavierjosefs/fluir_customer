@@ -2,11 +2,15 @@ import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../core/services/local_notification_service.dart';
 import '../../data/mock/mock_auth_repository.dart';
 import '../../domain/models/auth_state.dart';
 
 final mockAuthRepositoryProvider = Provider<MockAuthRepository>(
   (ref) => const MockAuthRepository(),
+);
+final localNotificationServiceProvider = Provider<LocalNotificationService>(
+  (ref) => FlutterLocalNotificationService(),
 );
 final authControllerProvider = NotifierProvider<AuthController, AuthState>(
   AuthController.new,
@@ -64,6 +68,7 @@ class AuthController extends Notifier<AuthState> {
         clearMessage: true,
       );
       _startCountdown();
+      unawaited(_deliverVerificationNotification());
     } on MockAuthSendException {
       state = state.copyWith(
         status: AuthStatus.sendFailure,
@@ -124,5 +129,13 @@ class AuthController extends Notifier<AuthState> {
         state = state.copyWith(remainingSeconds: state.remainingSeconds - 1);
       }
     });
+  }
+
+  Future<void> _deliverVerificationNotification() async {
+    try {
+      await ref.read(localNotificationServiceProvider).showVerificationCode();
+    } catch (_) {
+      // Notification permission or service failures cannot interrupt auth.
+    }
   }
 }

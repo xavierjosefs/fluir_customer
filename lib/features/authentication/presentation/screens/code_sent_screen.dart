@@ -17,7 +17,6 @@ class CodeSentScreen extends ConsumerWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const FluirWordmark(),
           const SizedBox(height: AppSpacing.xxl),
           const Icon(
             Icons.mark_email_read_outlined,

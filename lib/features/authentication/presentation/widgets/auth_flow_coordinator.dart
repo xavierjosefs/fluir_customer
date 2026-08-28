@@ -13,7 +13,7 @@ class AuthFlowCoordinator extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     ref.listen(authControllerProvider, (previous, next) {
       final destination = switch (next.status) {
-        AuthStatus.entry => '/auth',
+        AuthStatus.entry => '/onboarding',
         AuthStatus.editingPhone => '/auth/phone',
         AuthStatus.sendingCode => '/auth/phone',
         AuthStatus.codeSent => '/auth/code-sent',

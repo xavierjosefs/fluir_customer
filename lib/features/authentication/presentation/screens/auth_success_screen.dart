@@ -12,7 +12,6 @@ class AuthSuccessScreen extends StatelessWidget {
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        const FluirWordmark(),
         const SizedBox(height: AppSpacing.xxl),
         Semantics(
           label: 'Cuenta verificada correctamente',

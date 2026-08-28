@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 
-import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_spacing.dart';
 
 class AuthScaffold extends StatelessWidget {
@@ -37,26 +36,6 @@ class AuthScaffold extends StatelessWidget {
           ),
         ],
       ),
-    ),
-  );
-}
-
-class FluirWordmark extends StatelessWidget {
-  const FluirWordmark({super.key});
-  @override
-  Widget build(BuildContext context) => Semantics(
-    label: 'Fluir',
-    child: Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        const Icon(Icons.route_rounded, color: AppColors.brandGreen, size: 30),
-        const SizedBox(width: AppSpacing.xs),
-        Text(
-          'FLUIR',
-          style: Theme.of(context).textTheme.titleLarge
-              ?.copyWith(letterSpacing: 1.4, fontWeight: FontWeight.w800),
-        ),
-      ],
     ),
   );
 }

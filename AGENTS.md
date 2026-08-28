@@ -171,7 +171,60 @@ Keep presentation, state, models, and mock data reasonably separated.
 
 Follow the approved Fluir design explicitly.
 
-The visual identity is based on the existing Fluir logo.
+The visual identity is based on the official Fluir wordmark and brand references.
+
+### Fluir Brand Identity
+
+The primary Fluir logo is the lowercase `fluir` wordmark.
+
+The blue rounded-square graphic containing the wordmark is the APPLICATION ICON, not the primary in-app logo.
+
+Do not confuse the application icon with the Fluir wordmark.
+
+Inside the application UI, prefer the standalone Fluir wordmark whenever brand identification is required.
+
+The Fluir wordmark may appear in approved contextual variants such as:
+
+- White wordmark on Fluir blue
+- Green wordmark on Fluir blue
+- Dark wordmark on light surfaces
+
+Do not invent or use unrelated symbols as the Fluir logo.
+
+Never use the following as substitutes for the Fluir wordmark:
+
+- Generic route symbols
+- Abstract icons
+- Shields
+- Transportation icons
+- Material icons
+- Custom symbols invented by the implementation
+
+If the exact Fluir wordmark asset is available, always use the official asset instead of recreating it with an arbitrary font.
+
+Preserve:
+
+- Lowercase lettering
+- Original proportions
+- Character shapes
+- Spacing
+- Visual weight
+
+Do not:
+
+- Stretch the wordmark
+- Redraw it
+- Approximate it using an unrelated typeface
+- Add an icon beside it unless the official brand asset includes one
+- Arbitrarily recolor it outside approved brand variants
+
+The application icon may be used only where an actual app icon is contextually appropriate, such as:
+
+- Android/iOS launcher icon
+- App store representation
+- Platform notification/app identity where appropriate
+
+The application icon should generally NOT replace the standalone Fluir wordmark inside normal application screens.
 
 Primary visual language:
 
@@ -209,6 +262,51 @@ Avoid:
 
 Do not invent a new branding direction.
 
+### Contextual Brand Usage
+
+Fluir branding must be intentional and contextual.
+
+Do NOT force the Fluir wordmark onto every screen.
+
+The wordmark should have strong prominence in brand-oriented moments such as:
+
+- Splash
+- Onboarding
+- Welcome / brand introduction
+- Selected marketing or empty-state experiences when appropriate
+
+Task-oriented screens should prioritize clarity over repeated branding.
+
+Examples of task-oriented screens include:
+
+- Phone number entry
+- OTP verification
+- Error recovery
+- Payment forms
+- Destination search
+- Ride confirmation
+
+These screens do NOT require the Fluir wordmark simply for brand repetition.
+
+The Fluir visual identity should remain recognizable through:
+
+- Fluir blue
+- Fluir green
+- typography
+- spacing
+- component styling
+- motion
+- iconography
+- consistent interaction patterns
+
+Brand recognition should come from the complete design system, not from placing the logo on every screen.
+
+For Authentication specifically:
+
+- Onboarding may use strong Fluir branding.
+- Phone and OTP screens should prioritize the task and may omit the wordmark.
+- Do not insert a small floating wordmark without a clear compositional purpose.
+- 
 ---
 
 ## 9. Design Tokens

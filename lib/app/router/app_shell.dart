@@ -5,6 +5,8 @@ class FluirAppShell extends StatelessWidget {
   const FluirAppShell({required this.navigationShell, super.key});
   final StatefulNavigationShell navigationShell;
 
+  static const navigationHeight = 76.0;
+
   static const _destinations = [
     _NavigationDestinationData(
       label: 'Inicio',
@@ -30,6 +32,7 @@ class FluirAppShell extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Scaffold(
+    extendBody: true,
     body: navigationShell,
     bottomNavigationBar: SafeArea(
       top: false,

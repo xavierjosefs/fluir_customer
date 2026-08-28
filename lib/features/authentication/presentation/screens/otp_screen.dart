@@ -22,7 +22,6 @@ class OtpScreen extends ConsumerWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const FluirWordmark(),
           const SizedBox(height: AppSpacing.xxl),
           Text(
             isExpired ? 'Código expirado' : 'Ingresa el código',
