@@ -47,16 +47,17 @@ class _PhoneNumberScreenState extends ConsumerState<PhoneNumberScreen> {
   Widget build(BuildContext context) {
     final state = ref.watch(authControllerProvider);
     final controller = ref.read(authControllerProvider.notifier);
+    final colors = Theme.of(context).colorScheme;
     final isSending = state.status == AuthStatus.sendingCode;
     final isPhoneError = state.message != null && !state.isPhoneValid;
     final fieldBorder = isPhoneError
         ? AppColors.error
         : _phoneFocusNode.hasFocus
         ? AppColors.brandBlue
-        : AppColors.outline;
+        : colors.outline;
 
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: Stack(
         children: [
           const PhoneAuthBackground(),
@@ -97,7 +98,7 @@ class _PhoneNumberScreenState extends ConsumerState<PhoneNumberScreen> {
                           Text(
                             'Ingresa tu número de celular para continuar.',
                             style: Theme.of(context).textTheme.bodyLarge
-                                ?.copyWith(color: AppColors.textSecondary),
+                                ?.copyWith(color: colors.onSurfaceVariant),
                           ),
                           const SizedBox(height: AppSpacing.xl),
                           Text(
@@ -108,7 +109,7 @@ class _PhoneNumberScreenState extends ConsumerState<PhoneNumberScreen> {
                           Container(
                             height: 82,
                             decoration: BoxDecoration(
-                              color: Colors.white.withValues(alpha: .94),
+                              color: colors.surface.withValues(alpha: .94),
                               borderRadius: BorderRadius.circular(
                                 AppRadius.large,
                               ),
@@ -150,7 +151,7 @@ class _PhoneNumberScreenState extends ConsumerState<PhoneNumberScreen> {
                                 Container(
                                   width: 1,
                                   height: 36,
-                                  color: AppColors.outline,
+                                  color: colors.outline,
                                 ),
                                 Expanded(
                                   child: TextField(
@@ -196,7 +197,7 @@ class _PhoneNumberScreenState extends ConsumerState<PhoneNumberScreen> {
                           ElevatedButton(
                             onPressed: isSending ? null : controller.sendCode,
                             child: isSending
-                                ? const Row(
+                                ? Row(
                                     mainAxisAlignment: MainAxisAlignment.center,
                                     children: [
                                       SizedBox(
@@ -204,7 +205,7 @@ class _PhoneNumberScreenState extends ConsumerState<PhoneNumberScreen> {
                                         height: 20,
                                         child: CircularProgressIndicator(
                                           strokeWidth: 2,
-                                          color: Colors.white,
+                                          color: colors.onPrimary,
                                         ),
                                       ),
                                       SizedBox(width: AppSpacing.xs),

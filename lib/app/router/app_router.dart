@@ -1,12 +1,13 @@
 import 'package:go_router/go_router.dart';
 
 import '../../features/account/presentation/screens/account_placeholder_screen.dart';
-import '../../features/activity/presentation/screens/activity_placeholder_screen.dart';
+import '../../features/activity/presentation/screens/activity_screen.dart';
 import '../../features/authentication/presentation/screens/auth_success_screen.dart';
 import '../../features/authentication/presentation/screens/code_sent_screen.dart';
 import '../../features/authentication/presentation/screens/otp_screen.dart';
 import '../../features/authentication/presentation/screens/phone_number_screen.dart';
 import '../../features/authentication/presentation/widgets/auth_flow_coordinator.dart';
+import '../../features/home/presentation/screens/destination_search_screen.dart';
 import '../../features/home/presentation/screens/home_screen.dart';
 import '../../features/onboarding/presentation/screens/onboarding_screen.dart';
 import '../../features/payments/presentation/screens/payments_placeholder_screen.dart';
@@ -16,6 +17,7 @@ abstract final class AppRoutes {
   static const onboarding = '/onboarding';
   static const auth = '/auth';
   static const home = '/inicio';
+  static const destinationSearch = '/buscar-destino';
   static const activity = '/actividad';
   static const payments = '/pagos';
   static const account = '/cuenta';
@@ -53,6 +55,10 @@ final GoRouter appRouter = GoRouter(
         ),
       ],
     ),
+    GoRoute(
+      path: AppRoutes.destinationSearch,
+      builder: (context, state) => const DestinationSearchScreen(),
+    ),
     StatefulShellRoute.indexedStack(
       builder: (context, state, navigationShell) =>
           FluirAppShell(navigationShell: navigationShell),
@@ -69,15 +75,7 @@ final GoRouter appRouter = GoRouter(
           routes: [
             GoRoute(
               path: AppRoutes.activity,
-              builder: (context, state) => const ActivityPlaceholderScreen(),
-            ),
-          ],
-        ),
-        StatefulShellBranch(
-          routes: [
-            GoRoute(
-              path: AppRoutes.payments,
-              builder: (context, state) => const PaymentsPlaceholderScreen(),
+              builder: (context, state) => const ActivityScreen(),
             ),
           ],
         ),
@@ -90,6 +88,10 @@ final GoRouter appRouter = GoRouter(
           ],
         ),
       ],
+    ),
+    GoRoute(
+      path: AppRoutes.payments,
+      builder: (context, state) => const PaymentsPlaceholderScreen(),
     ),
   ],
 );

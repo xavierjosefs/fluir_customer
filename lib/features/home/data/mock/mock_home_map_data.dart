@@ -1,3 +1,4 @@
+import '../../domain/models/destination_search_result.dart';
 import '../../domain/models/home_coordinate.dart';
 import '../../domain/models/home_service.dart';
 import '../../domain/models/nearby_vehicle.dart';
@@ -14,6 +15,35 @@ abstract final class MockHomeMapData {
   static const cameraZoom = 14.8;
   static const cameraPitch = 0.0;
   static const cameraBearing = 0.0;
+
+  static const currentLocationDestination = DestinationSearchResult(
+    id: 'mock-current-location',
+    name: 'Mi ubicación actual',
+    formattedAddress: 'Santo Domingo, República Dominicana',
+    coordinate: pickupLocation,
+    featureType: 'mock_current_location',
+    isMock: true,
+  );
+
+  static const homeDestination = DestinationSearchResult(
+    id: 'mock-home',
+    name: 'Casa',
+    formattedAddress: 'Santo Domingo, República Dominicana',
+    coordinate: HomeCoordinate(latitude: 18.4808, longitude: -69.9382),
+    featureType: 'mock_saved_place',
+    isMock: true,
+  );
+
+  static const workDestination = DestinationSearchResult(
+    id: 'mock-work',
+    name: 'Trabajo',
+    formattedAddress: 'Santo Domingo, República Dominicana',
+    coordinate: HomeCoordinate(latitude: 18.4768, longitude: -69.9274),
+    featureType: 'mock_saved_place',
+    isMock: true,
+  );
+
+  static const savedDestinations = [homeDestination, workDestination];
 
   static const nearbyVehicles = [
     NearbyVehicle(

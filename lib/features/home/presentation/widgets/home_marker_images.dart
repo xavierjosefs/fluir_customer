@@ -39,6 +39,38 @@ abstract final class HomeMarkerImages {
     return _toPng(recorder, size.toInt(), size.toInt());
   }
 
+  static Future<Uint8List> destination() async {
+    const size = 54.0;
+    final recorder = ui.PictureRecorder();
+    final canvas = Canvas(recorder);
+
+    canvas.drawOval(
+      const Rect.fromLTWH(13, 43, 28, 7),
+      Paint()..color = Colors.black.withValues(alpha: .14),
+    );
+    canvas.drawCircle(const Offset(27, 26), 21, Paint()..color = Colors.white);
+    canvas.drawCircle(
+      const Offset(27, 26),
+      17,
+      Paint()..color = AppColors.brandBlue,
+    );
+
+    final pole = Paint()
+      ..color = Colors.white
+      ..strokeWidth = 2.4
+      ..strokeCap = StrokeCap.round;
+    canvas.drawLine(const Offset(22, 17), const Offset(22, 34), pole);
+    final flag = Path()
+      ..moveTo(23, 18)
+      ..lineTo(34, 20)
+      ..lineTo(29, 25)
+      ..lineTo(23, 24)
+      ..close();
+    canvas.drawPath(flag, Paint()..color = Colors.white);
+
+    return _toPng(recorder, size.toInt(), size.toInt());
+  }
+
   static Future<Uint8List> vehicle() async {
     const width = 42.0;
     const height = 54.0;

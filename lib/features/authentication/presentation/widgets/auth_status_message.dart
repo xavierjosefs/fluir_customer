@@ -37,7 +37,9 @@ class AuthStatusMessage extends StatelessWidget {
               child: Text(
                 message,
                 style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: isError ? AppColors.error : AppColors.textPrimary,
+                  color: isError
+                      ? AppColors.error
+                      : Theme.of(context).colorScheme.onSurface,
                 ),
               ),
             ),

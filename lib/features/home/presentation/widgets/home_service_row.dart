@@ -13,6 +13,7 @@ class HomeServiceRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
     final isComingSoon =
         service.availability == HomeServiceAvailability.comingSoon;
     return Semantics(
@@ -21,7 +22,7 @@ class HomeServiceRow extends StatelessWidget {
           ? '${service.title}. ${service.subtitle}. Próximamente.'
           : '${service.title}. ${service.subtitle}.',
       child: Material(
-        color: Colors.white,
+        color: colors.surface,
         borderRadius: BorderRadius.circular(AppRadius.medium),
         child: InkWell(
           onTap: onTap,
@@ -33,14 +34,12 @@ class HomeServiceRow extends StatelessWidget {
               vertical: AppSpacing.sm,
             ),
             decoration: BoxDecoration(
-              border: Border.all(
-                color: AppColors.outline.withValues(alpha: .72),
-              ),
+              border: Border.all(color: colors.outline.withValues(alpha: .72)),
               borderRadius: BorderRadius.circular(AppRadius.medium),
             ),
             child: Row(
               children: [
-                _ServiceIcon(title: service.title),
+                ExcludeSemantics(child: _ServiceImage(title: service.title)),
                 const SizedBox(width: AppSpacing.md),
                 Expanded(
                   child: Column(
@@ -56,7 +55,7 @@ class HomeServiceRow extends StatelessWidget {
                       Text(
                         service.subtitle,
                         style: Theme.of(context).textTheme.bodyMedium
-                            ?.copyWith(color: AppColors.textSecondary),
+                            ?.copyWith(color: colors.onSurfaceVariant),
                       ),
                     ],
                   ),
@@ -66,7 +65,7 @@ class HomeServiceRow extends StatelessWidget {
                   const _ComingSoonBadge(),
                 ],
                 const SizedBox(width: AppSpacing.xs),
-                const Icon(Icons.chevron_right, color: AppColors.textSecondary),
+                Icon(Icons.chevron_right, color: colors.onSurfaceVariant),
               ],
             ),
           ),
@@ -76,36 +75,125 @@ class HomeServiceRow extends StatelessWidget {
   }
 }
 
-class _ServiceIcon extends StatelessWidget {
-  const _ServiceIcon({required this.title});
+class _ServiceImage extends StatelessWidget {
+  const _ServiceImage({required this.title});
 
   final String title;
 
   @override
   Widget build(BuildContext context) {
-    final icon = switch (title) {
-      'Viaje' => Icons.directions_car_filled,
-      'Envío' => Icons.inventory_2_outlined,
-      _ => Icons.handyman_outlined,
-    };
-    final color = switch (title) {
-      'Viaje' => AppColors.navy,
-      'Envío' => const Color(0xFFB77936),
-      _ => AppColors.brandBlue,
-    };
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: .1),
-        borderRadius: BorderRadius.circular(AppRadius.small),
-      ),
-      child: SizedBox(
-        width: 48,
-        height: 48,
-        child: Icon(icon, color: color, size: 28),
+    final asset = homeServiceAsset(title);
+    return SizedBox(
+      width: 64,
+      height: 64,
+      child: Image.asset(asset, fit: BoxFit.contain),
+    );
+  }
+}
+
+class HomeExpandedServiceCard extends StatelessWidget {
+  const HomeExpandedServiceCard({
+    required this.service,
+    required this.onTap,
+    super.key,
+  });
+
+  final HomeService service;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    final isComingSoon =
+        service.availability == HomeServiceAvailability.comingSoon;
+    return Semantics(
+      button: true,
+      label: isComingSoon
+          ? '${service.title}. ${service.subtitle}. Próximamente.'
+          : '${service.title}. ${service.subtitle}.',
+      child: Material(
+        color: colors.surface,
+        borderRadius: BorderRadius.circular(AppRadius.large),
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(AppRadius.large),
+          child: Container(
+            key: ValueKey('expanded-service-${service.title}'),
+            constraints: const BoxConstraints(minHeight: 124),
+            padding: const EdgeInsets.fromLTRB(
+              AppSpacing.lg,
+              AppSpacing.md,
+              AppSpacing.md,
+              AppSpacing.md,
+            ),
+            decoration: BoxDecoration(
+              border: Border.all(color: colors.outline.withValues(alpha: .72)),
+              borderRadius: BorderRadius.circular(AppRadius.large),
+              boxShadow: [
+                BoxShadow(
+                  color: AppColors.navy.withValues(alpha: .035),
+                  blurRadius: 10,
+                  offset: const Offset(0, 3),
+                ),
+              ],
+            ),
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final imageSize = constraints.maxWidth > 390 ? 106.0 : 92.0;
+                return Row(
+                  children: [
+                    Expanded(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            service.title,
+                            style: Theme.of(context).textTheme.titleLarge
+                                ?.copyWith(fontWeight: FontWeight.w700),
+                          ),
+                          const SizedBox(height: AppSpacing.xxs),
+                          Text(
+                            service.subtitle,
+                            style: Theme.of(context).textTheme.bodyMedium
+                                ?.copyWith(color: colors.onSurfaceVariant),
+                          ),
+                          if (isComingSoon) ...[
+                            const SizedBox(height: AppSpacing.xs),
+                            const _ComingSoonBadge(),
+                          ],
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: AppSpacing.sm),
+                    ExcludeSemantics(
+                      child: SizedBox(
+                        width: imageSize,
+                        height: imageSize,
+                        child: Image.asset(
+                          homeServiceAsset(service.title),
+                          fit: BoxFit.contain,
+                        ),
+                      ),
+                    ),
+                    Icon(Icons.chevron_right, color: colors.onSurfaceVariant),
+                  ],
+                );
+              },
+            ),
+          ),
+        ),
       ),
     );
   }
 }
+
+String homeServiceAsset(String title) => switch (title) {
+  'Viaje' => 'assets/images/services/fluir_ride.png',
+  'Envío' => 'assets/images/services/fluir_delivery.png',
+  'Servicios' => 'assets/images/services/fluir_services.png',
+  _ => 'assets/images/services/fluir_services.png',
+};
 
 class _ComingSoonBadge extends StatelessWidget {
   const _ComingSoonBadge();

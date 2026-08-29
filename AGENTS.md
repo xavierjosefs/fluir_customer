@@ -552,24 +552,37 @@ Do not create generic errors with no useful next action when a specific recovery
 
 ## 19. Maps
 
-For the current prototype, do NOT integrate a real maps SDK unless explicitly requested.
+Mapbox is the explicitly approved real map provider for the current Fluir Customer prototype.
 
-Use a visual/mock implementation suitable for prototyping.
+Current approved map stack:
 
-The mock map may represent:
+- `mapbox_maps_flutter` for the native Android/iOS map canvas
+- `ACCESS_TOKEN` supplied through `String.fromEnvironment` via the centralized app environment/configuration
+- Mapbox Geocoding API v6 for temporary Dominican Republic destination/address search
 
-- current location
-- vehicles
-- pickup
-- destination
-- routes
-- movement/state changes
+Do not hardcode, print, log, or commit the real Mapbox access token.
 
-Keep the map implementation isolated so it can later be replaced by a real map provider.
+The Home map remains the visual canvas and must stay isolated from product overlays so it can be tested with a fake map surface. Preserve Mapbox attribution/wordmark requirements.
 
-The map is context for decision-making, not the entire interface.
+Current real capabilities may include:
 
-Important actions should normally be surfaced using overlays, cards, or bottom sheets.
+- map tiles/rendering
+- pan and zoom
+- mocked pickup and nearby vehicle annotations
+- temporary destination geocoding in Dominican Republic
+- selected-destination camera movement and marker
+
+Unless a future task explicitly authorizes them, do NOT add:
+
+- real device GPS/location permissions
+- Mapbox Directions/routing
+- route polylines
+- traffic/navigation
+- live vehicle tracking
+- a second map provider
+- permanent storage/caching of temporary Mapbox geocoding results
+
+The map is context for decision-making, not the entire interface. Important actions should remain in clear overlays, focused screens, cards, or bottom sheets.
 
 ---
 
@@ -793,6 +806,22 @@ Fluir must prioritize:
 
 CLARITY → COMPLETION → RECOVERY → CONSISTENCY → POLISH
 
+## Ride prototype conventions
+
+- Mapbox Directions v5 route calls use the centralized `ACCESS_TOKEN`; widgets do not make Directions HTTP calls.
+- Ride lifecycle transitions belong to an explicit controller/repository state machine. Timed transitions are permitted only as isolated local prototype simulation.
+- Ride fares, payment methods, vehicle assignment, and pickup estimates are deterministic local mock data until a backend task explicitly replaces them.
+- Active autonomous rides use a map canvas with safe-area-aware contextual status surfaces and hide the main navigation until the ride session is cleared.
+- Prototype sharing, vehicle unlock, and receipt-download actions must remain local and must not imply real device, fleet, or file integrations.
+- Completed ride receipts consume the completed ride session state and must not invent transaction data; they are not fiscal invoices unless fiscal functionality is explicitly implemented.
+- Home services and the main shell navigation use their dedicated Fluir image assets; navigation surfaces extend to the physical bottom edge while their interactive content remains SafeArea-aware.
+- At maximum extent, the Home services sheet becomes a focused service-selection composition within the same Home/map architecture; Viaje continues directly into the existing ride flow.
+- The final Home services sheet has three states: collapsed shows Viaje only, medium (the fresh Home default) shows all compact services, and expanded shows all large service-selection cards.
+- At the current prototype scope, main navigation is Inicio, Actividad, and Cuenta; payment details belong to ride planning and receipts, not a dedicated Payments tab.
+- Historical trip detail in Actividad is a compact premium ride summary with route, total, and read-only trip details, not an administrative table.
+- In Activity trip details, quick metrics (distance and time) are separated from secondary trip information for readability.
+- Cuenta is the customer settings surface; its dark-mode control applies globally, persists locally, preserves Fluir blue/green identity, and never relies on asset inversion.
+
 A beautiful screen that creates a dead end is not acceptable.
 
 A feature is not considered complete simply because its screen exists.
@@ -805,4 +834,3 @@ The user must understand:
 - What the service costs when relevant
 - Whether the service is available
 - How to recover if something fails
-

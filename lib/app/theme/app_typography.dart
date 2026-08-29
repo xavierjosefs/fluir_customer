@@ -53,4 +53,20 @@ abstract final class AppTypography {
       fontWeight: FontWeight.w600,
     ),
   );
+
+  static TextTheme withColors({
+    required Color primary,
+    required Color secondary,
+  }) {
+    final base = textTheme;
+    return base.copyWith(
+      displaySmall: base.displaySmall?.copyWith(color: primary),
+      headlineMedium: base.headlineMedium?.copyWith(color: primary),
+      titleLarge: base.titleLarge?.copyWith(color: primary),
+      titleMedium: base.titleMedium?.copyWith(color: primary),
+      bodyLarge: base.bodyLarge?.copyWith(color: primary),
+      bodyMedium: base.bodyMedium?.copyWith(color: secondary),
+      labelLarge: base.labelLarge?.copyWith(color: primary),
+    );
+  }
 }

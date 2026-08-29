@@ -10,6 +10,7 @@ import 'package:fluir_customer/features/authentication/domain/models/auth_state.
 import 'package:fluir_customer/features/authentication/presentation/controllers/auth_controller.dart';
 import 'package:fluir_customer/features/home/data/mock/mock_home_map_data.dart';
 import 'package:fluir_customer/features/home/presentation/screens/home_screen.dart';
+import 'package:fluir_customer/features/home/presentation/widgets/home_map_lifecycle_callbacks.dart';
 import 'package:fluir_customer/features/onboarding/presentation/widgets/onboarding_reference_background.dart';
 
 void main() {
@@ -259,11 +260,39 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Inicio'), findsAtLeastNWidgets(1));
     expect(find.text('Actividad'), findsOneWidget);
-    expect(find.text('Pagos'), findsOneWidget);
+    expect(find.text('Pagos'), findsNothing);
     expect(find.text('Cuenta'), findsOneWidget);
     expect(
       tester.widget<NavigationBar>(find.byType(NavigationBar)).selectedIndex,
       0,
+    );
+    expect(
+      find.byKey(const ValueKey('fluir-bottom-navigation-surface')),
+      findsOneWidget,
+    );
+    expect(
+      _assetImage('assets/images/navigation/nav_home.png'),
+      findsOneWidget,
+    );
+    expect(
+      _assetImage('assets/images/navigation/nav_activity.png'),
+      findsOneWidget,
+    );
+    expect(
+      _assetImage('assets/images/navigation/nav_account.png'),
+      findsOneWidget,
+    );
+    await tester.tap(find.text('Actividad'));
+    await tester.pumpAndSettle();
+    expect(
+      tester.widget<NavigationBar>(find.byType(NavigationBar)).selectedIndex,
+      1,
+    );
+    await tester.tap(find.text('Cuenta'));
+    await tester.pumpAndSettle();
+    expect(
+      tester.widget<NavigationBar>(find.byType(NavigationBar)).selectedIndex,
+      2,
     );
   });
 
@@ -287,7 +316,7 @@ void main() {
     expect(find.text('Próximamente'), findsNWidgets(2));
   });
 
-  testWidgets('home notification and destination search open mocked surfaces', (
+  testWidgets('home notification action opens its mocked surface', (
     tester,
   ) async {
     await tester.pumpWidget(
@@ -297,15 +326,10 @@ void main() {
         ),
       ),
     );
+    await tester.pumpAndSettle();
     await tester.tap(find.byIcon(Icons.notifications_none));
     await tester.pumpAndSettle();
     expect(find.text('Todavía no tienes notificaciones.'), findsOneWidget);
-    await tester.tapAt(const Offset(8, 8));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('¿A dónde vas?'));
-    await tester.pumpAndSettle();
-    expect(find.text('Buscar destino'), findsOneWidget);
-    expect(find.text('Centro Olímpico'), findsOneWidget);
   });
 
   testWidgets('home safely renders the missing Mapbox token state', (
@@ -330,8 +354,27 @@ void main() {
   });
 }
 
-Widget _fakeMapSurface(BuildContext context) =>
-    const ColoredBox(color: Color(0xFFF3F6F8));
+Widget _fakeMapSurface(
+  BuildContext context,
+  HomeMapLifecycleCallbacks lifecycle,
+) {
+  WidgetsBinding.instance.addPostFrameCallback((_) {
+    lifecycle.onMapCreated();
+    lifecycle.onStyleLoaded();
+    lifecycle.onCameraInitialized();
+    lifecycle.onPickupMarkerReady();
+    lifecycle.onVehicleMarkersReady();
+    lifecycle.onMapRendered();
+  });
+  return const ColoredBox(color: Color(0xFFF3F6F8));
+}
+
+Finder _assetImage(String asset) => find.byWidgetPredicate(
+  (widget) =>
+      widget is Image &&
+      widget.image is AssetImage &&
+      (widget.image as AssetImage).assetName == asset,
+);
 
 class FakeLocalNotificationService implements LocalNotificationService {
   int requests = 0;

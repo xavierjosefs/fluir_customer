@@ -62,7 +62,7 @@ class OtpScreen extends ConsumerWidget {
             ElevatedButton(
               onPressed: isVerifying ? null : controller.verifyOtp,
               child: isVerifying
-                  ? const Row(
+                  ? Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         SizedBox(
@@ -70,7 +70,7 @@ class OtpScreen extends ConsumerWidget {
                           height: 20,
                           child: CircularProgressIndicator(
                             strokeWidth: 2,
-                            color: Colors.white,
+                            color: Theme.of(context).colorScheme.onPrimary,
                           ),
                         ),
                         SizedBox(width: AppSpacing.xs),

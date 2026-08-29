@@ -1,7 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-class FluirAppShell extends StatelessWidget {
+import '../../features/home/presentation/controllers/home_readiness_controller.dart';
+import '../../features/ride/domain/models/ride_models.dart';
+import '../../features/ride/presentation/controllers/ride_controller.dart';
+
+class FluirAppShell extends ConsumerWidget {
   const FluirAppShell({required this.navigationShell, super.key});
   final StatefulNavigationShell navigationShell;
 
@@ -10,60 +15,86 @@ class FluirAppShell extends StatelessWidget {
   static const _destinations = [
     _NavigationDestinationData(
       label: 'Inicio',
-      icon: Icons.home_outlined,
-      selectedIcon: Icons.home,
+      asset: 'assets/images/navigation/nav_home.png',
     ),
     _NavigationDestinationData(
       label: 'Actividad',
-      icon: Icons.receipt_long_outlined,
-      selectedIcon: Icons.receipt_long,
-    ),
-    _NavigationDestinationData(
-      label: 'Pagos',
-      icon: Icons.account_balance_wallet_outlined,
-      selectedIcon: Icons.account_balance_wallet,
+      asset: 'assets/images/navigation/nav_activity.png',
     ),
     _NavigationDestinationData(
       label: 'Cuenta',
-      icon: Icons.person_outline,
-      selectedIcon: Icons.person,
+      asset: 'assets/images/navigation/nav_account.png',
     ),
   ];
 
   @override
-  Widget build(BuildContext context) => Scaffold(
-    extendBody: true,
-    body: navigationShell,
-    bottomNavigationBar: SafeArea(
-      top: false,
-      child: NavigationBar(
-        selectedIndex: navigationShell.currentIndex,
-        onDestinationSelected: (index) => navigationShell.goBranch(
-          index,
-          initialLocation: index == navigationShell.currentIndex,
-        ),
-        destinations: _destinations
-            .map(
-              (destination) => NavigationDestination(
-                icon: Icon(destination.icon),
-                selectedIcon: Icon(destination.selectedIcon),
-                label: destination.label,
-                tooltip: destination.label,
+  Widget build(BuildContext context, WidgetRef ref) {
+    final homeReadiness = ref.watch(homeReadinessControllerProvider);
+    final hideNavigationForInitialHomePreparation =
+        navigationShell.currentIndex == 0 && !homeReadiness.isReady;
+    final rideStatus = ref.watch(rideControllerProvider).status;
+    final hideNavigationForRide =
+        navigationShell.currentIndex == 0 && rideStatus != RideStatus.idle;
+
+    return Scaffold(
+      extendBody: true,
+      body: navigationShell,
+      bottomNavigationBar:
+          hideNavigationForInitialHomePreparation || hideNavigationForRide
+          ? null
+          : Container(
+              key: const ValueKey('fluir-bottom-navigation-surface'),
+              color: Theme.of(context).navigationBarTheme.backgroundColor,
+              child: SafeArea(
+                top: false,
+                child: NavigationBar(
+                  selectedIndex: navigationShell.currentIndex,
+                  onDestinationSelected: (index) => navigationShell.goBranch(
+                    index,
+                    initialLocation: index == navigationShell.currentIndex,
+                  ),
+                  destinations: _destinations
+                      .map(
+                        (destination) => NavigationDestination(
+                          icon: _NavigationImage(
+                            asset: destination.asset,
+                            opacity: .72,
+                          ),
+                          selectedIcon: _NavigationImage(
+                            asset: destination.asset,
+                          ),
+                          label: destination.label,
+                          tooltip: destination.label,
+                        ),
+                      )
+                      .toList(),
+                ),
               ),
-            )
-            .toList(),
-      ),
-    ),
-  );
+            ),
+    );
+  }
 }
 
 class _NavigationDestinationData {
-  const _NavigationDestinationData({
-    required this.label,
-    required this.icon,
-    required this.selectedIcon,
-  });
+  const _NavigationDestinationData({required this.label, required this.asset});
   final String label;
-  final IconData icon;
-  final IconData selectedIcon;
+  final String asset;
+}
+
+class _NavigationImage extends StatelessWidget {
+  const _NavigationImage({required this.asset, this.opacity = 1});
+  final String asset;
+  final double opacity;
+
+  @override
+  Widget build(BuildContext context) => ExcludeSemantics(
+    child: Opacity(
+      opacity: opacity,
+      child: SizedBox(
+        width: 28,
+        height: 28,
+        child: Image.asset(asset, fit: BoxFit.contain),
+      ),
+    ),
+  );
 }

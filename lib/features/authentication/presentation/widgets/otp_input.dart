@@ -138,18 +138,19 @@ class _OtpCell extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
     final borderColor = hasError
         ? AppColors.error
         : isActive
         ? AppColors.brandBlue
         : isCompleted
         ? AppColors.brandBlue.withValues(alpha: .45)
-        : AppColors.outline;
+        : colors.outline;
     return Container(
       height: 56,
       alignment: Alignment.center,
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: colors.surface,
         borderRadius: BorderRadius.circular(AppRadius.small),
         border: Border.all(color: borderColor, width: isActive ? 2 : 1),
       ),
