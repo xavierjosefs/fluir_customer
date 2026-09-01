@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/config/app_environment.dart';
 import '../../data/repositories/mapbox_geocoding_repository.dart';
 import '../../domain/models/destination_search_state.dart';
+import 'home_location_controller.dart';
 
 final mapboxAccessTokenProvider = Provider<String>(
   (ref) => AppEnvironment.mapboxAccessToken,
@@ -120,7 +121,11 @@ class DestinationSearchController extends Notifier<DestinationSearchState> {
     try {
       final results = await ref
           .read(destinationGeocodingRepositoryProvider)
-          .search(query: query, accessToken: accessToken);
+          .search(
+            query: query,
+            accessToken: accessToken,
+            proximity: ref.read(homeLocationControllerProvider).coordinate,
+          );
       if (requestGeneration != _requestGeneration) {
         return;
       }

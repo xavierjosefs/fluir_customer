@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:fluir_customer/features/home/data/repositories/mapbox_geocoding_repository.dart';
+import 'package:fluir_customer/features/home/domain/models/home_coordinate.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 
@@ -73,6 +74,22 @@ void main() {
     );
 
     expect(results, isEmpty);
+  });
+
+  test('uses the live coordinate as the proximity bias', () async {
+    late Uri capturedUri;
+    final repository = MapboxGeocodingRepository(
+      client: MockClient((request) async {
+        capturedUri = request.url;
+        return http.Response('{"features":[]}', 200);
+      }),
+    );
+    await repository.search(
+      query: 'Piantini',
+      accessToken: 'pk.test',
+      proximity: const HomeCoordinate(latitude: 18.41, longitude: -69.99),
+    );
+    expect(capturedUri.queryParameters['proximity'], '-69.99,18.41');
   });
 
   test('keeps a Piantini neighborhood when full_address is absent', () async {

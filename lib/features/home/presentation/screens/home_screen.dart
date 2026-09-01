@@ -15,6 +15,7 @@ import '../../data/mock/mock_home_map_data.dart';
 import '../../domain/models/destination_search_result.dart';
 import '../../domain/models/home_service.dart';
 import '../controllers/home_readiness_controller.dart';
+import '../controllers/home_location_controller.dart';
 import '../controllers/selected_destination_controller.dart';
 import '../home_providers.dart';
 import '../widgets/destination_search_field.dart';
@@ -72,6 +73,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     final mapSurfaceBuilder =
         widget.mapSurfaceBuilder ?? ref.watch(homeMapSurfaceBuilderProvider);
     final readiness = ref.watch(homeReadinessControllerProvider);
+    final location = ref.watch(homeLocationControllerProvider);
     final selectedDestination = ref.watch(selectedDestinationProvider);
     final ride = ref.watch(rideControllerProvider);
     final rideController = ref.read(rideControllerProvider.notifier);
@@ -108,8 +110,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         children: [
           FluirMap(
             key: ValueKey('fluir-map-$_mapGeneration'),
-            camera: MockHomeMapData.santoDomingoCamera,
-            pickup: MockHomeMapData.pickupLocation,
+            camera: location.coordinate ?? MockHomeMapData.santoDomingoCamera,
+            pickup: location.coordinate ?? MockHomeMapData.pickupLocation,
             vehicles: vehicles,
             destination: selectedDestination,
             route: ride.route,
@@ -195,6 +197,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     final controller = ref.read(homeReadinessControllerProvider.notifier);
     controller.markHomeDataReady();
     controller.markServicesReady();
+    unawaited(ref.read(homeLocationControllerProvider.notifier).resolve());
 
     final hasFakeMapSurface =
         widget.mapSurfaceBuilder != null ||
@@ -217,7 +220,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       if (!readiness.isReady && !readiness.hasFailed) {
         ref
             .read(homeReadinessControllerProvider.notifier)
-            .fail('Revisa tu conexión e inténtalo nuevamente.');
+            .fail('Inténtalo nuevamente.');
       }
     });
   }

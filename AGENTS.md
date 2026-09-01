@@ -821,6 +821,9 @@ CLARITY → COMPLETION → RECOVERY → CONSISTENCY → POLISH
 - Historical trip detail in Actividad is a compact premium ride summary with route, total, and read-only trip details, not an administrative table.
 - In Activity trip details, quick metrics (distance and time) are separated from secondary trip information for readability.
 - Cuenta is the customer settings surface; its dark-mode control applies globally, persists locally, preserves Fluir blue/green identity, and never relies on asset inversion.
+- Home prefers a foreground device location when available and falls back to Santo Domingo without blocking the experience; it never requests background location.
+- Current-location and autonomous-vehicle map markers must remain visually distinct on both light and dark Mapbox styles.
+- The branded onboarding canvas may remain theme-independent, while its system bars and interactive text/CTA must remain readable.
 
 A beautiful screen that creates a dead end is not acceptable.
 

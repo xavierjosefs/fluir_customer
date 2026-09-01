@@ -12,6 +12,7 @@ import 'package:fluir_customer/features/home/data/mock/mock_home_map_data.dart';
 import 'package:fluir_customer/features/home/presentation/screens/home_screen.dart';
 import 'package:fluir_customer/features/home/presentation/widgets/home_map_lifecycle_callbacks.dart';
 import 'package:fluir_customer/features/onboarding/presentation/widgets/onboarding_reference_background.dart';
+import 'package:fluir_customer/features/onboarding/presentation/screens/onboarding_screen.dart';
 
 void main() {
   Widget buildApp({LocalNotificationService? notifications}) {
@@ -82,12 +83,45 @@ void main() {
     );
     expect(
       continueButton.style!.backgroundColor!.resolve(<WidgetState>{}),
-      Colors.white,
+      const Color(0xFF080A0D),
     );
     await tester.tap(find.byKey(const ValueKey('onboarding-continue')));
     await tester.pumpAndSettle();
     expect(find.text('Hola, te damos\nla bienvenida'), findsOneWidget);
   });
+
+  testWidgets(
+    'onboarding keeps the vehicle centerpiece and CTA on compact screens',
+    (tester) async {
+      await tester.binding.setSurfaceSize(const Size(360, 640));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      await tester.pumpWidget(
+        const ProviderScope(child: MaterialApp(home: OnboardingScreen())),
+      );
+      expect(find.byKey(const ValueKey('onboarding-vehicle')), findsOneWidget);
+      expect(find.text('fluir'), findsOneWidget);
+      expect(find.byKey(const ValueKey('onboarding-continue')), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'onboarding hero composition remains overflow-free on taller phones',
+    (tester) async {
+      for (final size in [const Size(390, 844), const Size(430, 930)]) {
+        await tester.binding.setSurfaceSize(size);
+        await tester.pumpWidget(
+          const ProviderScope(child: MaterialApp(home: OnboardingScreen())),
+        );
+        expect(
+          find.byKey(const ValueKey('onboarding-vehicle')),
+          findsOneWidget,
+        );
+        expect(tester.takeException(), isNull);
+      }
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+    },
+  );
 
   testWidgets('phone defaults to Dominican territory and opens its selector', (
     tester,

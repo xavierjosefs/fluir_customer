@@ -41,6 +41,7 @@ dependencies:
   http: ^1.6.0
   mapbox_maps_flutter: ^2.29.1
   shared_preferences: ^2.5.4
+  geolocator: ^14.0.2
 
 dev_dependencies:
   flutter_test:
@@ -63,6 +64,7 @@ flutter:
     - assets/images/vehicles/
     - assets/images/services/
     - assets/images/navigation/
+    - assets/images/onboarding/
 
   # The following line ensures that the Material Icons font is
   # included with your application, so that you can use the icons in

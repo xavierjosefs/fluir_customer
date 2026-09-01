@@ -219,6 +219,7 @@ class _FakeGeocodingRepository implements DestinationGeocodingRepository {
   Future<List<DestinationSearchResult>> search({
     required String query,
     required String accessToken,
+    HomeCoordinate? proximity,
   }) async {
     queries.add(query);
     return results;
@@ -230,6 +231,7 @@ class _FailingGeocodingRepository implements DestinationGeocodingRepository {
   Future<List<DestinationSearchResult>> search({
     required String query,
     required String accessToken,
+    HomeCoordinate? proximity,
   }) => Future<List<DestinationSearchResult>>.error(
     const MapboxGeocodingException('offline'),
   );

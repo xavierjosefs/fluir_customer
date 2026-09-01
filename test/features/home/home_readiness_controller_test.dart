@@ -44,6 +44,18 @@ void main() {
     expect(reset.mapCreated, isFalse);
   });
 
+  test('generic map failures do not incorrectly blame connectivity', () {
+    final container = ProviderContainer();
+    addTearDown(container.dispose);
+
+    container.read(homeReadinessControllerProvider.notifier).fail();
+
+    expect(
+      container.read(homeReadinessControllerProvider).failureMessage,
+      'Inténtalo nuevamente.',
+    );
+  });
+
   test('ready state remains stable when Home lifecycle signals repeat', () {
     final container = ProviderContainer();
     addTearDown(container.dispose);

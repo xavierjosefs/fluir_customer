@@ -9,7 +9,9 @@ import '../../../../app/theme/app_spacing.dart';
 import '../../data/mock/mock_home_map_data.dart';
 import '../../domain/models/destination_search_result.dart';
 import '../../domain/models/destination_search_state.dart';
+import '../../domain/models/home_coordinate.dart';
 import '../controllers/destination_search_controller.dart';
+import '../controllers/home_location_controller.dart';
 
 class DestinationSearchScreen extends ConsumerStatefulWidget {
   const DestinationSearchScreen({super.key});
@@ -42,6 +44,7 @@ class _DestinationSearchScreenState
   Widget build(BuildContext context) {
     final state = ref.watch(destinationSearchControllerProvider);
     final controller = ref.read(destinationSearchControllerProvider.notifier);
+    final location = ref.watch(homeLocationControllerProvider);
 
     return AnnotatedRegion(
       value: Theme.of(context).brightness == Brightness.dark
@@ -75,6 +78,7 @@ class _DestinationSearchScreenState
               Expanded(
                 child: _SearchContent(
                   state: state,
+                  currentLocation: location.coordinate,
                   onRetry: controller.retry,
                   onSelect: (destination) => context.pop(destination),
                 ),
@@ -200,11 +204,13 @@ class _DestinationTextField extends StatelessWidget {
 class _SearchContent extends StatelessWidget {
   const _SearchContent({
     required this.state,
+    required this.currentLocation,
     required this.onRetry,
     required this.onSelect,
   });
 
   final DestinationSearchState state;
+  final HomeCoordinate? currentLocation;
   final VoidCallback onRetry;
   final ValueChanged<DestinationSearchResult> onSelect;
 
@@ -212,7 +218,10 @@ class _SearchContent extends StatelessWidget {
   Widget build(BuildContext context) {
     switch (state.status) {
       case DestinationSearchStatus.idle:
-        return _ShortcutList(onSelect: onSelect);
+        return _ShortcutList(
+          onSelect: onSelect,
+          currentLocation: currentLocation,
+        );
       case DestinationSearchStatus.typing:
         return Column(
           children: [
@@ -226,7 +235,12 @@ class _SearchContent extends StatelessWidget {
                 child: Text('Escribe al menos 3 caracteres para buscar.'),
               ),
             ),
-            Expanded(child: _ShortcutList(onSelect: onSelect)),
+            Expanded(
+              child: _ShortcutList(
+                onSelect: onSelect,
+                currentLocation: currentLocation,
+              ),
+            ),
           ],
         );
       case DestinationSearchStatus.loading:
@@ -264,9 +278,10 @@ class _SearchContent extends StatelessWidget {
 }
 
 class _ShortcutList extends StatelessWidget {
-  const _ShortcutList({required this.onSelect});
+  const _ShortcutList({required this.onSelect, required this.currentLocation});
 
   final ValueChanged<DestinationSearchResult> onSelect;
+  final HomeCoordinate? currentLocation;
 
   @override
   Widget build(BuildContext context) => ListView(
@@ -281,8 +296,8 @@ class _ShortcutList extends StatelessWidget {
       const SizedBox(height: AppSpacing.xs),
       _DestinationRow(
         icon: Icons.my_location,
-        destination: MockHomeMapData.currentLocationDestination,
-        onTap: () => onSelect(MockHomeMapData.currentLocationDestination),
+        destination: _currentLocationDestination(currentLocation),
+        onTap: () => onSelect(_currentLocationDestination(currentLocation)),
       ),
       const SizedBox(height: AppSpacing.lg),
       Text('Lugares guardados', style: Theme.of(context).textTheme.labelLarge),
@@ -297,6 +312,19 @@ class _ShortcutList extends StatelessWidget {
         ),
       ),
     ],
+  );
+}
+
+DestinationSearchResult _currentLocationDestination(
+  HomeCoordinate? coordinate,
+) {
+  if (coordinate == null) return MockHomeMapData.currentLocationDestination;
+  return DestinationSearchResult(
+    id: 'device-current-location',
+    name: 'Mi ubicación actual',
+    formattedAddress: 'Tu ubicación actual',
+    coordinate: coordinate,
+    featureType: 'current_location',
   );
 }
 

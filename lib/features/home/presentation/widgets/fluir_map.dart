@@ -1,6 +1,7 @@
-import 'dart:typed_data';
+import 'dart:async';
 import 'dart:ui' as ui;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:mapbox_maps_flutter/mapbox_maps_flutter.dart';
 
@@ -17,6 +18,9 @@ typedef HomeMapSurfaceBuilder = Widget Function(
   BuildContext context,
   HomeMapLifecycleCallbacks lifecycle,
 );
+
+String mapStyleUriFor(Brightness brightness) =>
+    brightness == Brightness.dark ? MapboxStyles.DARK : MapboxStyles.LIGHT;
 
 class FluirMap extends StatefulWidget {
   const FluirMap({
@@ -48,10 +52,17 @@ class _FluirMapState extends State<FluirMap> {
   PointAnnotationManager? _vehicleManager;
   PointAnnotationManager? _destinationManager;
   Uint8List? _destinationImage;
+  Uint8List? _pickupImage;
+  Uint8List? _vehicleImage;
   bool _isLoading = true;
   bool _hasError = false;
   bool _markersAdded = false;
   bool _styleLoaded = false;
+  bool _hasLoadedStyle = false;
+  String? _appliedStyleUri;
+  String? _desiredStyleUri;
+  String? _queuedStyleUri;
+  bool _styleSyncInFlight = false;
   bool _mapLoaded = false;
   bool _baseAnnotationsReady = false;
   bool _mapRenderedReported = false;
@@ -60,13 +71,88 @@ class _FluirMapState extends State<FluirMap> {
   int? _annotationsReadyFrameSequence;
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _requestMapStyle(mapStyleUriFor(Theme.of(context).brightness));
+  }
+
+  @override
   void didUpdateWidget(covariant FluirMap oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if ((oldWidget.camera != widget.camera ||
+            oldWidget.pickup != widget.pickup) &&
+        _styleLoaded) {
+      unawaited(_updateCurrentLocation());
+    }
     if (oldWidget.destination != widget.destination && _styleLoaded) {
       _showSelectedDestination(widget.destination);
     }
     if (oldWidget.route != widget.route && _styleLoaded) {
       _showRoute(widget.route);
+    }
+  }
+
+  void _requestMapStyle(String styleUri) {
+    _desiredStyleUri = styleUri;
+    _debugLog('Desired style: $styleUri.');
+    if (_appliedStyleUri == styleUri && !_styleSyncInFlight) return;
+    _queuedStyleUri = styleUri;
+    if (_styleSyncInFlight) return;
+    unawaited(_synchronizeRequestedStyle());
+  }
+
+  Future<void> _synchronizeRequestedStyle() async {
+    _styleSyncInFlight = true;
+    while (true) {
+      final styleUri = _queuedStyleUri;
+      if (styleUri == null) {
+        break;
+      }
+      _queuedStyleUri = null;
+      if (_appliedStyleUri == styleUri) continue;
+      final mapboxMap = _mapboxMap;
+      if (mapboxMap == null) {
+        _queuedStyleUri = styleUri;
+        _styleSyncInFlight = false;
+        return;
+      }
+      try {
+        _debugLog('Requesting native style load: $styleUri.');
+        await mapboxMap.loadStyleURI(styleUri);
+        _appliedStyleUri = styleUri;
+      } catch (_) {
+        _debugLog('Native style load failed.');
+        _styleSyncInFlight = false;
+        _reportFailure('Inténtalo nuevamente.');
+        return;
+      }
+    }
+    _styleSyncInFlight = false;
+    if (_queuedStyleUri != null && _mapboxMap != null) {
+      unawaited(_synchronizeRequestedStyle());
+    }
+  }
+
+  Future<void> _updateCurrentLocation() async {
+    final mapboxMap = _mapboxMap;
+    final pickupManager = _pickupManager;
+    if (mapboxMap == null || pickupManager == null) return;
+    try {
+      await mapboxMap.easeTo(
+        CameraOptions(center: _point(widget.camera), zoom: 14.8),
+        MapAnimationOptions(duration: 450),
+      );
+      _pickupImage ??= await HomeMarkerImages.pickup();
+      await pickupManager.deleteAll();
+      await pickupManager.create(
+        PointAnnotationOptions(
+          geometry: _point(widget.pickup),
+          image: _pickupImage!,
+          iconAnchor: IconAnchor.CENTER,
+        ),
+      );
+    } catch (_) {
+      // A location refresh must never block the usable map fallback.
     }
   }
 
@@ -82,13 +168,12 @@ class _FluirMapState extends State<FluirMap> {
       return const _MapRuntimeErrorSurface();
     }
 
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final styleUri = mapStyleUriFor(Theme.of(context).brightness);
     return Stack(
       fit: StackFit.expand,
       children: [
         MapWidget(
-          key: ValueKey('fluir-map-style-${isDark ? 'dark' : 'light'}'),
-          styleUri: isDark ? MapboxStyles.DARK : MapboxStyles.LIGHT,
+          styleUri: styleUri,
           viewport: CameraViewportState(
             center: _point(widget.camera),
             zoom: 14.8,
@@ -101,7 +186,7 @@ class _FluirMapState extends State<FluirMap> {
           onRenderFrameFinishedListener: (_) => _onRenderFrameFinished(),
           onMapLoadErrorListener: (_) {
             if (!_mapLoaded) {
-              _reportFailure('Revisa tu conexión e inténtalo nuevamente.');
+              _reportFailure('Inténtalo nuevamente.');
             }
           },
         ),
@@ -113,6 +198,15 @@ class _FluirMapState extends State<FluirMap> {
 
   Future<void> _onMapCreated(MapboxMap mapboxMap) async {
     _mapboxMap = mapboxMap;
+    final initialStyleUri = mapStyleUriFor(Theme.of(context).brightness);
+    // MapWidget owns the first style request through its styleUri. Treat its
+    // first callback as current rather than discarding it as a stale reload.
+    _appliedStyleUri ??= initialStyleUri;
+    _desiredStyleUri ??= initialStyleUri;
+    _debugLog('Map created with initial style: $initialStyleUri.');
+    if (_desiredStyleUri != _appliedStyleUri) {
+      _requestMapStyle(_desiredStyleUri!);
+    }
     widget.lifecycle.onMapCreated();
     try {
       await mapboxMap.setCamera(
@@ -124,8 +218,9 @@ class _FluirMapState extends State<FluirMap> {
         ),
       );
       widget.lifecycle.onCameraInitialized();
+      _debugLog('Initial camera ready.');
       if (_styleLoaded) {
-        await _addBaseMarkers();
+        await _restoreStyleDependentMapContent();
       }
     } catch (_) {
       _reportFailure('No pudimos preparar la vista del mapa.');
@@ -133,9 +228,24 @@ class _FluirMapState extends State<FluirMap> {
   }
 
   Future<void> _onStyleLoaded() async {
+    final desiredStyleUri = _desiredStyleUri;
+    if (desiredStyleUri != null && desiredStyleUri != _appliedStyleUri) {
+      _requestMapStyle(desiredStyleUri);
+      return;
+    }
+    final isStyleReload = _hasLoadedStyle;
+    _hasLoadedStyle = true;
     _styleLoaded = true;
+    if (isStyleReload) {
+      _pickupManager = null;
+      _vehicleManager = null;
+      _destinationManager = null;
+      _markersAdded = false;
+      _baseAnnotationsReady = false;
+    }
+    _debugLog('Style loaded${isStyleReload ? ' and reloading visuals' : ''}.');
     widget.lifecycle.onStyleLoaded();
-    await _addBaseMarkers();
+    await _restoreStyleDependentMapContent();
   }
 
   void _onMapLoaded() {
@@ -167,14 +277,15 @@ class _FluirMapState extends State<FluirMap> {
     widget.lifecycle.onMapRendered();
   }
 
-  Future<void> _addBaseMarkers() async {
+  Future<void> _restoreStyleDependentMapContent() async {
     if (_markersAdded || _mapboxMap == null) {
       return;
     }
     _markersAdded = true;
+    final mapboxMap = _mapboxMap!;
+    _debugLog('Restoring style-dependent visuals.');
 
     try {
-      final mapboxMap = _mapboxMap!;
       await Future.wait([
         mapboxMap.logo.updateSettings(
           LogoSettings(
@@ -191,25 +302,47 @@ class _FluirMapState extends State<FluirMap> {
           ),
         ),
       ]);
+    } catch (_) {
+      _debugLog('Map ornaments could not be restored.');
+    }
 
+    try {
       final images = await Future.wait<Uint8List>([
         HomeMarkerImages.pickup(),
         HomeMarkerImages.vehicle(),
         HomeMarkerImages.destination(),
       ]);
       _destinationImage = images[2];
+      _pickupImage = images[0];
+      _vehicleImage = images[1];
+    } catch (_) {
+      _debugLog('Marker images could not be prepared.');
+    }
 
+    try {
+      if (_pickupImage == null) {
+        throw StateError('Pickup marker image unavailable.');
+      }
       _pickupManager = await mapboxMap.annotations
           .createPointAnnotationManager();
       await _pickupManager!.create(
         PointAnnotationOptions(
           geometry: _point(widget.pickup),
-          image: images[0],
-          iconAnchor: IconAnchor.BOTTOM,
+          image: _pickupImage!,
+          iconAnchor: IconAnchor.CENTER,
         ),
       );
+    } catch (_) {
+      _debugLog('Pickup marker could not be restored.');
+    } finally {
+      // Decorative overlays must never make the native map unavailable.
       widget.lifecycle.onPickupMarkerReady();
+    }
 
+    try {
+      if (_vehicleImage == null) {
+        throw StateError('Vehicle marker image unavailable.');
+      }
       _vehicleManager = await mapboxMap.annotations
           .createPointAnnotationManager();
       await _vehicleManager!.createMulti(
@@ -217,34 +350,39 @@ class _FluirMapState extends State<FluirMap> {
             .map(
               (vehicle) => PointAnnotationOptions(
                 geometry: _point(vehicle.position),
-                image: images[1],
+                image: _vehicleImage!,
                 iconRotate: vehicle.heading,
                 iconAnchor: IconAnchor.CENTER,
               ),
             )
             .toList(growable: false),
       );
+    } catch (_) {
+      _debugLog('Vehicle markers could not be restored.');
+    } finally {
       widget.lifecycle.onVehicleMarkersReady();
+    }
 
+    try {
       if (widget.destination != null) {
         await _showSelectedDestination(widget.destination, animate: false);
       }
       if (widget.route != null) {
-        await _showRoute(widget.route);
+        await _showRoute(widget.route, fitCamera: false);
       }
-
-      _baseAnnotationsReady = true;
-      _annotationsReadyFrameSequence = _renderedFrameSequence;
-      _tryReportCompleteMapFrame();
     } catch (_) {
-      _reportFailure('No pudimos preparar los elementos del mapa.');
+      _debugLog('Optional destination or route visual could not be restored.');
     }
+    _baseAnnotationsReady = true;
+    _annotationsReadyFrameSequence = _renderedFrameSequence;
+    _tryReportCompleteMapFrame();
+    _debugLog('Style-dependent visual restoration completed.');
   }
 
   static const _routeSourceId = 'fluir-ride-route-source';
   static const _routeLayerId = 'fluir-ride-route-layer';
 
-  Future<void> _showRoute(RideRoute? route) async {
+  Future<void> _showRoute(RideRoute? route, {bool fitCamera = true}) async {
     final mapboxMap = _mapboxMap;
     if (mapboxMap == null || !_styleLoaded) return;
     final style = mapboxMap.style;
@@ -269,6 +407,7 @@ class _FluirMapState extends State<FluirMap> {
           lineJoin: LineJoin.ROUND,
         ),
       );
+      if (!fitCamera) return;
       final options = await mapboxMap.cameraForCoordinatesPadding(
         route.coordinates.map(_point).toList(growable: false),
         CameraOptions(pitch: 0, bearing: 0),
@@ -345,6 +484,7 @@ class _FluirMapState extends State<FluirMap> {
       return;
     }
     _failureReported = true;
+    _debugLog('Map initialization failed.');
     if (mounted) {
       setState(() {
         _hasError = true;
@@ -356,6 +496,12 @@ class _FluirMapState extends State<FluirMap> {
 
   Point _point(HomeCoordinate coordinate) =>
       Point(coordinates: Position(coordinate.longitude, coordinate.latitude));
+
+  void _debugLog(String message) {
+    if (kDebugMode) {
+      debugPrint('[FluirMap] $message');
+    }
+  }
 }
 
 class _MapConfigurationFallback extends StatelessWidget {

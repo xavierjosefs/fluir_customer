@@ -52,7 +52,7 @@ class RideSheet extends StatelessWidget {
       );
     }
     return Material(
-      color: Colors.white,
+      color: Theme.of(context).colorScheme.surface,
       elevation: _isFocusedPlanning ? 0 : 8,
       borderRadius: _isFocusedPlanning
           ? null
@@ -143,14 +143,14 @@ class RideSheet extends StatelessWidget {
           ),
         ),
         const SizedBox(height: AppSpacing.md),
-        const Align(
+        Align(
           alignment: Alignment.centerLeft,
           child: Text(
             'Método de pago',
             style: TextStyle(
               fontSize: 14,
               fontWeight: FontWeight.w700,
-              color: AppColors.textPrimary,
+              color: Theme.of(context).colorScheme.onSurface,
             ),
           ),
         ),
@@ -170,10 +170,13 @@ class RideSheet extends StatelessWidget {
           ),
         ),
         const SizedBox(height: AppSpacing.sm),
-        const Text(
+        Text(
           'Puedes cancelar sin costo antes de confirmar.',
           textAlign: TextAlign.center,
-          style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
+          style: TextStyle(
+            fontSize: 12,
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
+          ),
         ),
       ],
     ),
@@ -247,9 +250,9 @@ class _PlanningHeader extends StatelessWidget {
                 if (metadata.isNotEmpty)
                   Text(
                     metadata,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 13,
-                      color: AppColors.textSecondary,
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
                     ),
                   ),
               ],
@@ -294,10 +297,14 @@ class _VehicleOptionCard extends StatelessWidget {
           height: 126,
           padding: const EdgeInsets.all(AppSpacing.md),
           decoration: BoxDecoration(
-            color: selected ? const Color(0xFFF0FBF7) : Colors.white,
+            color: selected
+                ? AppColors.brandGreen.withValues(alpha: .12)
+                : Theme.of(context).colorScheme.surface,
             borderRadius: BorderRadius.circular(AppRadius.medium),
             border: Border.all(
-              color: selected ? AppColors.brandGreen : AppColors.outline,
+              color: selected
+                  ? AppColors.brandGreen
+                  : Theme.of(context).colorScheme.outline,
               width: selected ? 2 : 1,
             ),
             boxShadow: const [
@@ -318,7 +325,7 @@ class _VehicleOptionCard extends StatelessWidget {
                   children: [
                     Text(
                       displayName,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.w700,
                       ),
@@ -326,17 +333,17 @@ class _VehicleOptionCard extends StatelessWidget {
                     const SizedBox(height: AppSpacing.xs),
                     Text(
                       '${option.passengerCapacity} pasajeros',
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 13,
-                        color: AppColors.textSecondary,
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
                       ),
                     ),
                     const SizedBox(height: AppSpacing.xs),
                     Text(
                       'Llega en ${option.pickupMinutes} min',
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 13,
-                        color: AppColors.textSecondary,
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
                       ),
                     ),
                   ],
@@ -359,7 +366,9 @@ class _VehicleOptionCard extends StatelessWidget {
                         ? Icons.check_circle
                         : Icons.radio_button_unchecked,
                     size: 19,
-                    color: selected ? AppColors.brandGreen : AppColors.outline,
+                    color: selected
+                        ? AppColors.brandGreen
+                        : Theme.of(context).colorScheme.outline,
                   ),
                 ],
               ),
@@ -411,7 +420,7 @@ class _PaymentRow extends StatelessWidget {
           vertical: AppSpacing.sm,
         ),
         decoration: BoxDecoration(
-          border: Border.all(color: AppColors.outline),
+          border: Border.all(color: Theme.of(context).colorScheme.outline),
           borderRadius: BorderRadius.circular(AppRadius.medium),
         ),
         child: Row(
@@ -424,7 +433,10 @@ class _PaymentRow extends StatelessWidget {
                 style: const TextStyle(fontWeight: FontWeight.w600),
               ),
             ),
-            const Icon(Icons.chevron_right, color: AppColors.textSecondary),
+            Icon(
+              Icons.chevron_right,
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
           ],
         ),
       ),

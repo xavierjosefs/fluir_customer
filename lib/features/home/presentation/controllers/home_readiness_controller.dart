@@ -74,8 +74,6 @@ class HomeReadinessController extends Notifier<HomeReadinessState> {
 
   void fail([String? message]) {
     if (state.hasFailed) return;
-    state = state.copyWith(
-      failureMessage: message ?? 'No pudimos cargar el mapa. Revisa tu conexión e inténtalo nuevamente.',
-    );
+    state = state.copyWith(failureMessage: message ?? 'Inténtalo nuevamente.');
   }
 }

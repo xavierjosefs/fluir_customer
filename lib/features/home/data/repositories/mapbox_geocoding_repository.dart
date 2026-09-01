@@ -9,6 +9,7 @@ abstract interface class DestinationGeocodingRepository {
   Future<List<DestinationSearchResult>> search({
     required String query,
     required String accessToken,
+    HomeCoordinate? proximity,
   });
 }
 
@@ -23,25 +24,38 @@ class MapboxGeocodingRepository implements DestinationGeocodingRepository {
 
   final http.Client _client;
   final bool _ownsClient;
+  static const _fallbackProximity = HomeCoordinate(
+    latitude: 18.4861,
+    longitude: -69.9312,
+  );
 
-  Uri buildForwardUri({required String query, required String accessToken}) =>
-      Uri.https(_host, _path, {
-        'q': query,
-        'access_token': accessToken,
-        'autocomplete': 'true',
-        'permanent': 'false',
-        'country': 'DO',
-        'language': 'es',
-        'proximity': '-69.9312,18.4861',
-        'limit': '6',
-      });
+  Uri buildForwardUri({
+    required String query,
+    required String accessToken,
+    HomeCoordinate? proximity,
+  }) => Uri.https(_host, _path, {
+    'q': query,
+    'access_token': accessToken,
+    'autocomplete': 'true',
+    'permanent': 'false',
+    'country': 'DO',
+    'language': 'es',
+    'proximity':
+        '${(proximity ?? _fallbackProximity).longitude},${(proximity ?? _fallbackProximity).latitude}',
+    'limit': '6',
+  });
 
   @override
   Future<List<DestinationSearchResult>> search({
     required String query,
     required String accessToken,
+    HomeCoordinate? proximity,
   }) async {
-    final results = await _searchOnce(query: query, accessToken: accessToken);
+    final results = await _searchOnce(
+      query: query,
+      accessToken: accessToken,
+      proximity: proximity,
+    );
     // Some short sector queries need the local context to be unambiguous. This
     // is deliberately a second request only when the primary request is empty.
     if (results.isNotEmpty || query.toLowerCase().contains('santo domingo')) {
@@ -50,15 +64,23 @@ class MapboxGeocodingRepository implements DestinationGeocodingRepository {
     return _searchOnce(
       query: '$query, Santo Domingo, República Dominicana',
       accessToken: accessToken,
+      proximity: proximity,
     );
   }
 
   Future<List<DestinationSearchResult>> _searchOnce({
     required String query,
     required String accessToken,
+    HomeCoordinate? proximity,
   }) async {
     final response = await _client
-        .get(buildForwardUri(query: query, accessToken: accessToken))
+        .get(
+          buildForwardUri(
+            query: query,
+            accessToken: accessToken,
+            proximity: proximity,
+          ),
+        )
         .timeout(_requestTimeout);
 
     if (response.statusCode < 200 || response.statusCode >= 300) {

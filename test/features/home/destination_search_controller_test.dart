@@ -233,6 +233,7 @@ class _FakeGeocodingRepository implements DestinationGeocodingRepository {
   Future<List<DestinationSearchResult>> search({
     required String query,
     required String accessToken,
+    HomeCoordinate? proximity,
   }) async {
     queries.add(query);
     if (shouldFail) {
@@ -249,6 +250,7 @@ class _ControlledGeocodingRepository implements DestinationGeocodingRepository {
   Future<List<DestinationSearchResult>> search({
     required String query,
     required String accessToken,
+    HomeCoordinate? proximity,
   }) {
     final completer = Completer<List<DestinationSearchResult>>();
     _pending[query] = completer;
