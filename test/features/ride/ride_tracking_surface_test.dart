@@ -1,4 +1,5 @@
 import 'package:fluir_customer/features/home/domain/models/destination_search_result.dart';
+import 'package:fluir_customer/features/payments/domain/models/card_brand.dart';
 import 'package:fluir_customer/features/home/domain/models/home_coordinate.dart';
 import 'package:fluir_customer/features/ride/domain/models/ride_models.dart';
 import 'package:fluir_customer/features/ride/domain/models/ride_route.dart';
@@ -13,6 +14,13 @@ const _destination = DestinationSearchResult(
   formattedAddress: 'Santo Domingo',
   coordinate: HomeCoordinate(latitude: 18.47, longitude: -69.9),
   featureType: 'place',
+);
+// A confirmed ride always carries the payment it was confirmed with.
+const _payment = RidePaymentOption(
+  id: 'pm_1',
+  label: 'Visa •••• 4242',
+  kind: RidePaymentKind.card,
+  brand: CardBrand.visa,
 );
 const _route = RideRoute(
   coordinates: [
@@ -30,6 +38,7 @@ Widget _tracking(RideStatus status) => MaterialApp(
         status: status,
         destination: _destination,
         route: _route,
+        payment: _payment,
         vehicleId: 'FLUIR-001',
         completedAt: DateTime(2026, 8, 28, 10, 42),
       ),
@@ -94,7 +103,7 @@ void main() {
       await tester.tap(find.text('Listo'));
       await tester.pump();
 
-      expect(find.text('RD\$374'), findsNWidgets(3));
+      expect(find.text('RD\$354'), findsNWidgets(3));
       expect(find.text('Pagado'), findsOneWidget);
       expect(find.text('Mi ubicación actual'), findsOneWidget);
       expect(find.text('Centro Olímpico'), findsOneWidget);
@@ -129,6 +138,7 @@ void main() {
               status: RideStatus.completed,
               destination: _destination,
               route: _route,
+              payment: _payment,
               vehicleId: 'FLUIR-001',
               completedAt: DateTime(2026, 8, 28, 10, 42),
             ),

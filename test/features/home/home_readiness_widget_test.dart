@@ -40,7 +40,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 300));
 
     expect(find.text('Preparando tu experiencia…'), findsNothing);
-    expect(find.text('Hola, Ana 👋'), findsOneWidget);
+    expect(find.text('Hola, Federico 👋'), findsOneWidget);
   });
 
   testWidgets('Home readiness timeout exposes a retryable full-screen error', (

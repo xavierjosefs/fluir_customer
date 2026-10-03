@@ -22,7 +22,7 @@ void main() {
       ),
     );
     for (final label in [
-      'Ana Rodríguez',
+      'Federico De la Cruz',
       'Modo oscuro',
       'Notificaciones',
       'Métodos de pago',

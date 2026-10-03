@@ -41,7 +41,7 @@ class AccountPlaceholderScreen extends ConsumerWidget {
                   backgroundColor: AppColors.brandBlue.withValues(alpha: .15),
                   foregroundColor: AppColors.brandBlue,
                   child: const Text(
-                    'AR',
+                    'FD',
                     style: TextStyle(fontWeight: FontWeight.w800),
                   ),
                 ),
@@ -51,12 +51,12 @@ class AccountPlaceholderScreen extends ConsumerWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'Ana Rodríguez',
+                        'Federico De la Cruz',
                         style: Theme.of(context).textTheme.titleMedium,
                       ),
                       const SizedBox(height: AppSpacing.xxs),
                       Text(
-                        'ana.rodriguez@email.com',
+                        'federico.delacruz@email.com',
                         style: Theme.of(context).textTheme.bodyMedium,
                       ),
                       Text(
@@ -94,14 +94,11 @@ class AccountPlaceholderScreen extends ConsumerWidget {
                 ),
                 const Divider(height: 1),
                 _AccountRow(
+                  key: const ValueKey('account-payment-methods-row'),
                   icon: Icons.credit_card_outlined,
                   title: 'Métodos de pago',
-                  subtitle: 'Tarjetas y métodos de pago',
-                  onTap: () => _showInfo(
-                    context,
-                    'Métodos de pago',
-                    'Visa •••• 4242\nMastercard •••• 1881',
-                  ),
+                  subtitle: 'Tarjetas guardadas para tus viajes',
+                  onTap: () => context.push(AppRoutes.paymentMethods),
                 ),
               ],
             ),
@@ -118,7 +115,8 @@ class AccountPlaceholderScreen extends ConsumerWidget {
                   onTap: () => _showInfo(
                     context,
                     'Perfil',
-                    'Ana Rodríguez\nana.rodriguez@email.com\n+1 809-555-1234',
+                    'Federico De la Cruz\nfederico.delacruz@email.com\n'
+                        '+1 809-555-1234',
                   ),
                 ),
                 const Divider(height: 1),
@@ -297,6 +295,7 @@ class _AccountRow extends StatelessWidget {
     required this.title,
     required this.subtitle,
     required this.onTap,
+    super.key,
   });
   final IconData icon;
   final String title;

@@ -10,10 +10,14 @@ import '../../features/authentication/presentation/widgets/auth_flow_coordinator
 import '../../features/home/presentation/screens/destination_search_screen.dart';
 import '../../features/home/presentation/screens/home_screen.dart';
 import '../../features/onboarding/presentation/screens/onboarding_screen.dart';
+import '../../features/payments/presentation/screens/add_payment_method_page.dart';
+import '../../features/payments/presentation/screens/payment_methods_page.dart';
 import '../../features/payments/presentation/screens/payments_placeholder_screen.dart';
+import '../../features/splash/presentation/screens/splash_screen.dart';
 import 'app_shell.dart';
 
 abstract final class AppRoutes {
+  static const splash = '/';
   static const onboarding = '/onboarding';
   static const auth = '/auth';
   static const home = '/inicio';
@@ -21,11 +25,17 @@ abstract final class AppRoutes {
   static const activity = '/actividad';
   static const payments = '/pagos';
   static const account = '/cuenta';
+  static const paymentMethods = '/metodos-de-pago';
+  static const addPaymentMethod = '/metodos-de-pago/agregar';
 }
 
 final GoRouter appRouter = GoRouter(
-  initialLocation: AppRoutes.onboarding,
+  initialLocation: AppRoutes.splash,
   routes: [
+    GoRoute(
+      path: AppRoutes.splash,
+      builder: (context, state) => const SplashScreen(),
+    ),
     GoRoute(
       path: AppRoutes.onboarding,
       builder: (context, state) => const OnboardingScreen(),
@@ -92,6 +102,16 @@ final GoRouter appRouter = GoRouter(
     GoRoute(
       path: AppRoutes.payments,
       builder: (context, state) => const PaymentsPlaceholderScreen(),
+    ),
+    GoRoute(
+      path: AppRoutes.paymentMethods,
+      builder: (context, state) => const PaymentMethodsPage(),
+      routes: [
+        GoRoute(
+          path: 'agregar',
+          builder: (context, state) => const AddPaymentMethodPage(),
+        ),
+      ],
     ),
   ],
 );

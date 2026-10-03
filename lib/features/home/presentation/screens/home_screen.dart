@@ -118,67 +118,82 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             lifecycle: lifecycle,
             surfaceBuilder: mapSurfaceBuilder,
           ),
-          SafeArea(
-            bottom: false,
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(
-                AppSpacing.lg,
-                AppSpacing.sm,
-                AppSpacing.lg,
-                0,
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  HomeHeader(
-                    onNotificationsTap: () => _showNotifications(context),
-                  ),
-                  const SizedBox(height: AppSpacing.lg),
-                  DestinationSearchField(
-                    destinationLabel: selectedDestination?.name,
-                    onTap: _openDestinationSearch,
-                  ),
-                ],
+          // The ride sheet carries its own destination header and back action,
+          // so the Home search overlay would only repeat it.
+          if (ride.status == RideStatus.idle)
+            SafeArea(
+              bottom: false,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(
+                  AppSpacing.lg,
+                  AppSpacing.sm,
+                  AppSpacing.lg,
+                  0,
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    HomeHeader(
+                      onNotificationsTap: () => _showNotifications(context),
+                    ),
+                    const SizedBox(height: AppSpacing.lg),
+                    DestinationSearchField(
+                      destinationLabel: selectedDestination?.name,
+                      onTap: _openDestinationSearch,
+                    ),
+                  ],
+                ),
               ),
             ),
-          ),
-          Positioned(
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: navigationInset,
-            child: ride.status == RideStatus.idle
-                ? DraggableScrollableSheet(
-                    key: const ValueKey('home-services-sheet'),
-                    controller: _servicesSheetController,
-                    initialChildSize: _mediumSheetSize,
-                    minChildSize: _collapsedSheetSize,
-                    maxChildSize: _serviceSelectionSheetSize,
-                    snap: true,
-                    snapSizes: const [_mediumSheetSize],
-                    expand: false,
-                    builder: (context, scrollController) => HomeServicesPanel(
-                      services: services,
-                      onServiceTap: (service) =>
-                          _handleServiceTap(context, service),
-                      scrollController: scrollController,
-                      onHeaderTap: _expandServicesPanel,
-                      mode: _sheetMode,
-                    ),
-                  )
-                : RideSheet(
-                    state: ride,
-                    controller: rideController,
-                    onBackToDestination: () {
-                      rideController.cancel();
-                      ref.read(selectedDestinationProvider.notifier).clear();
-                    },
-                    onReturnHome: () {
-                      rideController.reset();
-                      ref.read(selectedDestinationProvider.notifier).clear();
-                    },
-                  ),
-          ),
+          if (ride.status == RideStatus.idle)
+            Positioned(
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: navigationInset,
+              child: DraggableScrollableSheet(
+                key: const ValueKey('home-services-sheet'),
+                controller: _servicesSheetController,
+                initialChildSize: _mediumSheetSize,
+                minChildSize: _collapsedSheetSize,
+                maxChildSize: _serviceSelectionSheetSize,
+                snap: true,
+                snapSizes: const [_mediumSheetSize],
+                expand: false,
+                builder: (context, scrollController) => HomeServicesPanel(
+                  services: services,
+                  onServiceTap: (service) =>
+                      _handleServiceTap(context, service),
+                  scrollController: scrollController,
+                  onHeaderTap: _expandServicesPanel,
+                  mode: _sheetMode,
+                ),
+              ),
+            )
+          else
+            Positioned(
+              // Choosing a vehicle keeps the route on the map visible above the
+              // sheet; a live trip takes the whole screen.
+              top: ride.status.isActiveTrip ? 0 : null,
+              left: 0,
+              right: 0,
+              bottom: navigationInset,
+              height: ride.status == RideStatus.planning
+                  ? _vehiclePickerHeight(context)
+                  : null,
+              child: RideSheet(
+                state: ride,
+                controller: rideController,
+                onBackToDestination: () {
+                  rideController.cancel();
+                  ref.read(selectedDestinationProvider.notifier).clear();
+                },
+                onReturnHome: () {
+                  rideController.reset();
+                  ref.read(selectedDestinationProvider.notifier).clear();
+                },
+              ),
+            ),
           Positioned.fill(
             child: HomePreparationOverlay(
               state: readiness,
@@ -188,6 +203,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         ],
       ),
     );
+  }
+
+  /// Tall enough for the fleet list and the confirmation footer, and never so
+  /// tall that the map disappears.
+  static double _vehiclePickerHeight(BuildContext context) {
+    final height = MediaQuery.sizeOf(context).height;
+    return (height * .68).clamp(320.0, height - 96);
   }
 
   void _prepareHome() {

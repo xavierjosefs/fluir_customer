@@ -13,6 +13,7 @@ import 'package:fluir_customer/features/home/presentation/screens/home_screen.da
 import 'package:fluir_customer/features/home/presentation/widgets/home_map_lifecycle_callbacks.dart';
 import 'package:fluir_customer/features/onboarding/presentation/widgets/onboarding_reference_background.dart';
 import 'package:fluir_customer/features/onboarding/presentation/screens/onboarding_screen.dart';
+import 'package:fluir_customer/shared/widgets/fluir_wordmark.dart';
 
 void main() {
   Widget buildApp({LocalNotificationService? notifications}) {
@@ -50,7 +51,7 @@ void main() {
   testWidgets('phone screen renders and rejects invalid input', (tester) async {
     await moveToPhone(tester);
     expect(find.text('Hola, te damos\nla bienvenida'), findsOneWidget);
-    expect(find.text('fluir'), findsNothing);
+    expect(find.byType(FluirWordmark), findsNothing);
     await tester.ensureVisible(find.text('Continuar'));
     await tester.tap(find.text('Continuar'));
     await tester.pump();
@@ -68,7 +69,7 @@ void main() {
       find.text('Movilidad autónoma,\nenvíos y servicios'),
       findsOneWidget,
     );
-    expect(find.text('fluir'), findsOneWidget);
+    expect(find.byType(FluirWordmark), findsOneWidget);
     expect(find.byKey(const ValueKey('onboarding-continue')), findsOneWidget);
     expect(
       find.ancestor(
@@ -99,7 +100,7 @@ void main() {
         const ProviderScope(child: MaterialApp(home: OnboardingScreen())),
       );
       expect(find.byKey(const ValueKey('onboarding-vehicle')), findsOneWidget);
-      expect(find.text('fluir'), findsOneWidget);
+      expect(find.byType(FluirWordmark), findsOneWidget);
       expect(find.byKey(const ValueKey('onboarding-continue')), findsOneWidget);
       expect(tester.takeException(), isNull);
     },
@@ -192,7 +193,7 @@ void main() {
       await submitPhone(tester);
       await tester.tap(find.text('Ingresar código'));
       await tester.pumpAndSettle();
-      expect(find.text('fluir'), findsNothing);
+      expect(find.byType(FluirWordmark), findsNothing);
       await tester.enterText(find.byType(TextField), '000000');
       await tester.tap(find.text('Verificar código'));
       await tester.pumpAndSettle();
@@ -340,7 +341,7 @@ void main() {
         ),
       ),
     );
-    expect(find.text('Hola, Ana 👋'), findsOneWidget);
+    expect(find.text('Hola, Federico 👋'), findsOneWidget);
     expect(find.text('¿A dónde vamos hoy?'), findsOneWidget);
     expect(find.text('¿A dónde vas?'), findsOneWidget);
     expect(find.text('¿Qué necesitas hoy?'), findsOneWidget);

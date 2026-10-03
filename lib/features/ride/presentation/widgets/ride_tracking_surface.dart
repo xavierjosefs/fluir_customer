@@ -4,6 +4,7 @@ import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_radius.dart';
 import '../../../../app/theme/app_spacing.dart';
 import '../../domain/models/ride_models.dart';
+import '../../domain/ride_fare.dart';
 import '../controllers/ride_controller.dart';
 import 'ride_receipt.dart';
 
@@ -482,11 +483,7 @@ class _TrackingVehicleImage extends StatelessWidget {
   final String optionId;
   @override
   Widget build(BuildContext context) {
-    final asset = switch (optionId) {
-      'standard' => 'assets/images/vehicles/fluir_standard.png',
-      'xl' => 'assets/images/vehicles/fluir_xl.png',
-      _ => 'assets/images/vehicles/fluir_comfort.png',
-    };
+    final asset = RideVehicleAssets.forOptionId(optionId);
     return SizedBox(
       width: 136,
       height: 92,
@@ -602,7 +599,10 @@ class _CompletedTrip extends StatelessWidget {
           style: const TextStyle(fontSize: 32, fontWeight: FontWeight.w800),
         ),
         const SizedBox(height: AppSpacing.lg),
-        Text(state.payment.label, textAlign: TextAlign.center),
+        Text(
+          (state.payment ?? RidePaymentOption.cash).label,
+          textAlign: TextAlign.center,
+        ),
         const SizedBox(height: AppSpacing.lg),
         const Text(
           'Califica tu experiencia',
@@ -649,5 +649,7 @@ String _displayName(RideOption option) => switch (option.id) {
   'xl' => 'FLUIR XL',
   _ => 'FLUIR Comfort',
 };
-String _fare(RideState state) =>
-    'RD\$${(85 + state.route!.distanceMeters / 1000 * 42 + state.option.multiplier * 20).round()}';
+String _fare(RideState state) => RideFare.formatted(
+  distanceMeters: state.route!.distanceMeters,
+  option: state.option,
+);

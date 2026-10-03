@@ -5,51 +5,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/config/app_environment.dart';
 import '../../../home/data/mock/mock_home_map_data.dart';
 import '../../../home/domain/models/destination_search_result.dart';
+import '../../../payments/presentation/payments_providers.dart';
 import '../../data/repositories/mapbox_directions_repository.dart';
 import '../../domain/models/ride_models.dart';
 import '../../domain/models/ride_route.dart';
-
-const rideOptions = [
-  RideOption(
-    id: 'standard',
-    name: 'Estándar',
-    description: 'Viaje autónomo para todos los días',
-    passengerCapacity: 4,
-    pickupMinutes: 3,
-    multiplier: 1,
-    recommended: true,
-  ),
-  RideOption(
-    id: 'comfort',
-    name: 'Confort',
-    description: 'Más espacio en una unidad autónoma',
-    passengerCapacity: 4,
-    pickupMinutes: 5,
-    multiplier: 1.32,
-  ),
-  RideOption(
-    id: 'xl',
-    name: 'XL',
-    description: 'Unidad autónoma para hasta 6 personas',
-    passengerCapacity: 6,
-    pickupMinutes: 7,
-    multiplier: 1.68,
-  ),
-];
-const paymentMethods = [
-  PaymentMethod(id: 'visa', label: 'Visa •••• 4242'),
-  PaymentMethod(id: 'mastercard', label: 'Mastercard •••• 1881'),
-];
-const defaultRideOption = RideOption(
-  id: 'standard',
-  name: 'Estándar',
-  description: 'Viaje autónomo para todos los días',
-  passengerCapacity: 4,
-  pickupMinutes: 3,
-  multiplier: 1,
-  recommended: true,
-);
-const defaultPaymentMethod = PaymentMethod(id: 'visa', label: 'Visa •••• 4242');
 
 class RideState {
   const RideState({
@@ -57,7 +16,7 @@ class RideState {
     this.destination,
     this.route,
     this.option = defaultRideOption,
-    this.payment = defaultPaymentMethod,
+    this.payment,
     this.vehicleId,
     this.rating,
     this.completedAt,
@@ -67,7 +26,10 @@ class RideState {
   final DestinationSearchResult? destination;
   final RideRoute? route;
   final RideOption option;
-  final PaymentMethod payment;
+
+  /// What the customer explicitly picked. `null` means "whatever the wallet
+  /// suggests"; see [effectiveRidePaymentProvider].
+  final RidePaymentOption? payment;
   final String? vehicleId;
   final int? rating;
   final DateTime? completedAt;
@@ -77,7 +39,7 @@ class RideState {
     DestinationSearchResult? destination,
     RideRoute? route,
     RideOption? option,
-    PaymentMethod? payment,
+    RidePaymentOption? payment,
     String? vehicleId,
     int? rating,
     DateTime? completedAt,
@@ -103,6 +65,18 @@ final directionsRepositoryProvider = Provider<DirectionsRepository>((ref) {
 });
 final rideControllerProvider = NotifierProvider<RideController, RideState>(
   RideController.new,
+);
+
+/// The payment the ride will actually use: the customer's explicit choice,
+/// otherwise their default saved card, otherwise cash.
+///
+/// Cash is the floor on purpose — a customer with no card can still confirm a
+/// ride instead of hitting a dead end at the last step.
+final effectiveRidePaymentProvider = Provider<RidePaymentOption>(
+  (ref) => RidePaymentSelection.resolve(
+    ref.watch(rideControllerProvider).payment,
+    ref.watch(paymentMethodsControllerProvider).methods,
+  ),
 );
 
 class RideController extends Notifier<RideState> {
@@ -141,13 +115,26 @@ class RideController extends Notifier<RideState> {
     return destination == null ? Future.value() : plan(destination);
   }
 
-  void selectOption(RideOption option) =>
-      state = state.copyWith(option: option);
-  void selectPayment(PaymentMethod payment) =>
+  /// Only bookable tiers can be selected; a tier that is not available yet
+  /// keeps the current choice intact.
+  void selectOption(RideOption option) {
+    if (!option.isAvailable) return;
+    state = state.copyWith(option: option);
+  }
+
+  void selectPayment(RidePaymentOption payment) =>
       state = state.copyWith(payment: payment);
   void confirm() {
     if (state.route == null || state.status != RideStatus.planning) return;
-    state = state.copyWith(status: RideStatus.searchingVehicle);
+    // Freeze the payment now: the receipt must show what the ride was
+    // confirmed with, even if the wallet changes while the trip runs.
+    state = state.copyWith(
+      status: RideStatus.searchingVehicle,
+      payment: RidePaymentSelection.resolve(
+        state.payment,
+        ref.read(paymentMethodsControllerProvider).methods,
+      ),
+    );
     _schedule(RideStatus.vehicleAssigned, const Duration(seconds: 3));
   }
 

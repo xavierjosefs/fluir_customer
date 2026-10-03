@@ -5,7 +5,9 @@ import '../../../../app/theme/app_radius.dart';
 import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_typography.dart';
 import '../../../home/data/mock/mock_home_map_data.dart';
+import '../../../payments/presentation/widgets/payment_method_brand_mark.dart';
 import '../../domain/models/ride_models.dart';
+import '../../domain/ride_fare.dart';
 import '../controllers/ride_controller.dart';
 
 class RideReceipt extends StatelessWidget {
@@ -54,7 +56,9 @@ class RideReceipt extends StatelessWidget {
                 const SizedBox(height: AppSpacing.lg),
                 const _SectionTitle('Método de pago'),
                 const SizedBox(height: AppSpacing.sm),
-                _PaymentCard(payment: state.payment),
+                // Set when the ride was confirmed; cash is the documented
+                // floor of that resolution.
+                _PaymentCard(payment: state.payment ?? RidePaymentOption.cash),
                 const SizedBox(height: AppSpacing.lg),
                 const _SectionTitle('Detalle del cobro'),
                 const SizedBox(height: AppSpacing.sm),
@@ -393,32 +397,22 @@ class _VehicleCard extends StatelessWidget {
 
 class _PaymentCard extends StatelessWidget {
   const _PaymentCard({required this.payment});
-  final PaymentMethod payment;
+  final RidePaymentOption payment;
   @override
   Widget build(BuildContext context) {
-    final isVisa = payment.id == 'visa';
     return Semantics(
       label: 'Método de pago ${payment.label}',
       child: _ReceiptCard(
         child: Row(
           children: [
-            Container(
-              width: 42,
-              height: 28,
-              alignment: Alignment.center,
-              decoration: BoxDecoration(
-                color: isVisa ? const Color(0xFF143D8D) : AppColors.navy,
-                borderRadius: BorderRadius.circular(AppRadius.small),
-              ),
-              child: Text(
-                isVisa ? 'VISA' : 'MC',
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 11,
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
-            ),
+            if (payment.isCash)
+              const Icon(
+                Icons.payments_outlined,
+                size: 26,
+                color: AppColors.brandGreenInk,
+              )
+            else
+              PaymentMethodBrandMark(brand: payment.brand, size: .8),
             const SizedBox(width: AppSpacing.md),
             Expanded(
               child: Text(
@@ -510,8 +504,10 @@ class _ReceiptCard extends StatelessWidget {
   );
 }
 
-String formatRideFare(RideState state) =>
-    'RD\$${(85 + state.route!.distanceMeters / 1000 * 42 + state.option.multiplier * 20).round()}';
+String formatRideFare(RideState state) => RideFare.formatted(
+  distanceMeters: state.route!.distanceMeters,
+  option: state.option,
+);
 
 String formatRideDistance(RideState state) {
   final meters = state.route!.distanceMeters;
@@ -523,17 +519,10 @@ String formatRideDistance(RideState state) {
 String formatRideDuration(RideState state) =>
     '${(state.route!.durationSeconds / 60).ceil()} min';
 
-String receiptServiceName(RideOption option) => switch (option.id) {
-  'standard' => 'FLUIR',
-  'xl' => 'FLUIR XL',
-  _ => 'FLUIR Comfort',
-};
+String receiptServiceName(RideOption option) => option.displayName;
 
-String vehicleAssetFor(String optionId) => switch (optionId) {
-  'standard' => 'assets/images/vehicles/fluir_standard.png',
-  'xl' => 'assets/images/vehicles/fluir_xl.png',
-  _ => 'assets/images/vehicles/fluir_comfort.png',
-};
+String vehicleAssetFor(String optionId) =>
+    RideVehicleAssets.forOptionId(optionId);
 
 String receiptNumber(RideState state) {
   final completedAt = state.completedAt!;

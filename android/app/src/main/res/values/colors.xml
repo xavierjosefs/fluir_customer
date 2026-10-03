@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Official Fluir brand plate. Keeps the OS launch window on the same
+         colour as the in-app splash, so there is no white flash on start. -->
+    <color name="fluir_launch_background">#0070E0</color>
+</resources>

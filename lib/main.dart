@@ -7,6 +7,8 @@ import 'app/system_ui.dart';
 import 'app/theme/theme_controller.dart';
 import 'app/theme/theme_preferences_repository.dart';
 import 'core/config/mapbox_configuration.dart';
+import 'features/payments/data/repositories/card_vault_store.dart';
+import 'features/payments/presentation/payments_providers.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -21,6 +23,9 @@ Future<void> main() async {
         themePreferencesRepositoryProvider.overrideWithValue(repository),
         initialThemeModeProvider.overrideWithValue(
           darkMode ? ThemeMode.dark : ThemeMode.light,
+        ),
+        cardVaultStoreProvider.overrideWithValue(
+          SharedPreferencesCardVaultStore(preferences),
         ),
       ],
       child: const FluirApp(),

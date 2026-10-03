@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_radius.dart';
 import '../../../../app/theme/app_spacing.dart';
+import '../../../ride/domain/models/ride_models.dart';
 import '../../domain/models/ride_history_item.dart';
 import '../activity_providers.dart';
 
@@ -680,11 +681,8 @@ class _ActivityEmptyState extends StatelessWidget {
   );
 }
 
-String _vehicleAssetFor(String serviceName) => switch (serviceName) {
-  'FLUIR XL' => 'assets/images/vehicles/fluir_xl.png',
-  'FLUIR Comfort' => 'assets/images/vehicles/fluir_comfort.png',
-  _ => 'assets/images/vehicles/fluir_standard.png',
-};
+String _vehicleAssetFor(String serviceName) =>
+    RideVehicleAssets.forDisplayName(serviceName);
 
 String _fare(int pesos) => 'RD\$$pesos';
 

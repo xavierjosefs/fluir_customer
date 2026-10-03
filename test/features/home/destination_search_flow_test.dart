@@ -12,6 +12,7 @@ import 'package:fluir_customer/features/home/presentation/controllers/destinatio
 import 'package:fluir_customer/features/home/presentation/home_providers.dart';
 import 'package:fluir_customer/features/home/presentation/screens/destination_search_screen.dart';
 import 'package:fluir_customer/features/home/presentation/screens/home_screen.dart';
+import 'package:fluir_customer/features/home/presentation/widgets/destination_search_field.dart';
 import 'package:fluir_customer/features/home/presentation/widgets/fluir_map.dart';
 import 'package:fluir_customer/features/home/presentation/widgets/home_map_lifecycle_callbacks.dart';
 
@@ -95,7 +96,10 @@ void main() {
       await tester.tap(find.text('Avenida 27 de Febrero'));
       await tester.pumpAndSettle();
 
-      expect(find.text('Avenida 27 de Febrero'), findsNWidgets(2));
+      // Home hands the destination to the ride sheet and steps out of the
+      // way, so the name is shown once, not echoed by the search overlay.
+      expect(find.text('Avenida 27 de Febrero'), findsOneWidget);
+      expect(find.byType(DestinationSearchField), findsNothing);
       final map = tester.widget<FluirMap>(find.byType(FluirMap));
       expect(map.destination?.id, 'street.27-febrero');
     },

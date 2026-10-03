@@ -810,7 +810,13 @@ CLARITY → COMPLETION → RECOVERY → CONSISTENCY → POLISH
 
 - Mapbox Directions v5 route calls use the centralized `ACCESS_TOKEN`; widgets do not make Directions HTTP calls.
 - Ride lifecycle transitions belong to an explicit controller/repository state machine. Timed transitions are permitted only as isolated local prototype simulation.
-- Ride fares, payment methods, vehicle assignment, and pickup estimates are deterministic local mock data until a backend task explicitly replaces them.
+- Ride fares, vehicle assignment, and pickup estimates are deterministic local mock data until a backend task explicitly replaces them. One fare formula (`RideFare`) serves the picker, tracking and the receipt.
+- The Fluir fleet catalogue — commercial names, artwork and availability — lives in `ride/domain/models/ride_models.dart`. Surfaces resolve vehicle artwork through `RideVehicleAssets`, never with their own asset switch.
+- A vehicle tier that is not bookable yet is `comingSoon`: it shows no price, cannot be selected, and explains itself when tapped. Every tier currently on offer, including `FLUIR Air`, is bookable.
+- Cards are captured and tokenised inside the app; the hosted AZUL Payment Page is not used. The card exists only between the form submit and the vault call, and is never written to disk, logs or an error report.
+- The wallet defaults to the on-device simulated vault, which states plainly that nothing reaches AZUL. The gateway takes over only when `PaymentGatewayEnvironment.isDirectGatewayEnabled` resolves true.
+- Ride payment is a saved card or Efectivo; cash is always offered so the confirmation step is never a dead end, and the selection is frozen at confirm time.
+- The app opens on a branded splash that always hands over to onboarding, including under reduced motion. `FluirWordmark` renders the official asset and is only ever recoloured to an approved variant.
 - Active autonomous rides use a map canvas with safe-area-aware contextual status surfaces and hide the main navigation until the ride session is cleared.
 - Prototype sharing, vehicle unlock, and receipt-download actions must remain local and must not imply real device, fleet, or file integrations.
 - Completed ride receipts consume the completed ride session state and must not invent transaction data; they are not fiscal invoices unless fiscal functionality is explicitly implemented.

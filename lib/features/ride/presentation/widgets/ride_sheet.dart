@@ -1,25 +1,26 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_radius.dart';
 import '../../../../app/theme/app_spacing.dart';
+import '../../../payments/presentation/widgets/payment_method_brand_mark.dart';
 import '../../domain/models/ride_models.dart';
 import '../../domain/models/ride_route.dart';
+import '../../domain/ride_fare.dart';
 import '../controllers/ride_controller.dart';
+import 'ride_option_row.dart';
+import 'ride_payment_sheet.dart';
 import 'ride_tracking_surface.dart';
 
-Iterable<RideOption> get _planningOptions => [
-  rideOptions[0],
-  rideOptions[2],
-  rideOptions[1],
-];
-
-class RideSheet extends StatelessWidget {
+class RideSheet extends ConsumerWidget {
   const RideSheet({
     required this.state,
     required this.controller,
     required this.onBackToDestination,
     required this.onReturnHome,
+    this.now,
+    this.options = rideOptions,
     super.key,
   });
 
@@ -28,22 +29,15 @@ class RideSheet extends StatelessWidget {
   final VoidCallback onBackToDestination;
   final VoidCallback onReturnHome;
 
-  bool get _isFocusedPlanning =>
-      state.status == RideStatus.calculatingRoute ||
-      state.status == RideStatus.planning ||
-      state.status == RideStatus.error;
+  /// Reference clock for the arrival estimates. Injected by tests.
+  final DateTime? now;
 
-  bool get _isTracking =>
-      state.status == RideStatus.searchingVehicle ||
-      state.status == RideStatus.vehicleAssigned ||
-      state.status == RideStatus.vehicleArriving ||
-      state.status == RideStatus.readyToBoard ||
-      state.status == RideStatus.inProgress ||
-      state.status == RideStatus.completed;
+  /// The fleet on offer. Overridden by tests.
+  final List<RideOption> options;
 
   @override
-  Widget build(BuildContext context) {
-    if (_isTracking) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    if (state.status.isActiveTrip) {
       return RideTrackingSurface(
         state: state,
         controller: controller,
@@ -53,163 +47,261 @@ class RideSheet extends StatelessWidget {
     }
     return Material(
       color: Theme.of(context).colorScheme.surface,
-      elevation: _isFocusedPlanning ? 0 : 8,
-      borderRadius: _isFocusedPlanning
-          ? null
-          : const BorderRadius.vertical(top: Radius.circular(AppRadius.large)),
-      child: SafeArea(
-        top: _isFocusedPlanning,
-        child: SingleChildScrollView(
-          padding: EdgeInsets.fromLTRB(
-            AppSpacing.lg,
-            _isFocusedPlanning ? AppSpacing.lg : AppSpacing.sm,
-            AppSpacing.lg,
-            AppSpacing.lg,
+      elevation: 8,
+      borderRadius: const BorderRadius.vertical(
+        top: Radius.circular(AppRadius.large),
+      ),
+      // Home already positions the sheet above the system inset.
+      child: SafeArea(top: false, bottom: false, child: _content(context, ref)),
+    );
+  }
+
+  Widget _content(BuildContext context, WidgetRef ref) {
+    if (state.status == RideStatus.calculatingRoute) {
+      return const Padding(
+        padding: EdgeInsets.all(AppSpacing.lg),
+        child: _Status(
+          title: 'Calculando tu ruta…',
+          detail: 'Estamos preparando las opciones para tu viaje.',
+          loading: true,
+        ),
+      );
+    }
+    if (state.status == RideStatus.error) {
+      return Padding(
+        padding: const EdgeInsets.all(AppSpacing.lg),
+        child: _PlanningHeader(
+          destination: state.destination?.name ?? 'Destino',
+          metadata: '',
+          onBack: onBackToDestination,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'No pudimos calcular la ruta',
+                style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700),
+              ),
+              const SizedBox(height: AppSpacing.xs),
+              const Text('Inténtalo nuevamente o cambia tu destino.'),
+              const SizedBox(height: AppSpacing.md),
+              FilledButton(
+                onPressed: controller.retry,
+                child: const Text('Reintentar'),
+              ),
+            ],
           ),
-          child: _content(context),
+        ),
+      );
+    }
+    if (state.status == RideStatus.planning) {
+      return _planning(context, ref, state.route!);
+    }
+    return const SizedBox.shrink();
+  }
+
+  Widget _planning(BuildContext context, WidgetRef ref, RideRoute route) {
+    final clock = now ?? DateTime.now();
+    final payment = ref.watch(effectiveRidePaymentProvider);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const _SheetGrabber(),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(
+            AppSpacing.md,
+            AppSpacing.xs,
+            AppSpacing.lg,
+            0,
+          ),
+          child: _PlanningHeader(
+            destination: state.destination!.name,
+            metadata:
+                '${(route.durationSeconds / 60).ceil()} min • '
+                '${(route.distanceMeters / 1000).toStringAsFixed(1)} km',
+            onBack: onBackToDestination,
+          ),
+        ),
+        const SizedBox(height: AppSpacing.xs),
+        Expanded(
+          child: ListView(
+            padding: const EdgeInsets.fromLTRB(
+              AppSpacing.md,
+              0,
+              AppSpacing.md,
+              AppSpacing.sm,
+            ),
+            children: [
+              for (final option in options)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: AppSpacing.xs),
+                  child: RideOptionRow(
+                    option: option,
+                    price: option.isAvailable
+                        ? RideFare.formatted(
+                            distanceMeters: route.distanceMeters,
+                            option: option,
+                          )
+                        : null,
+                    arrival: _arrivalLabel(clock, route, option),
+                    selected: state.option.id == option.id,
+                    onTap: () => _selectOption(context, option),
+                  ),
+                ),
+            ],
+          ),
+        ),
+        _Footer(
+          payment: payment,
+          onPaymentTap: () => _changePayment(context, ref, payment),
+          onConfirm: controller.confirm,
+        ),
+      ],
+    );
+  }
+
+  void _selectOption(BuildContext context, RideOption option) {
+    if (option.isAvailable) {
+      controller.selectOption(option);
+      return;
+    }
+    showModalBottomSheet<void>(
+      context: context,
+      builder: (sheetContext) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(AppSpacing.lg),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                option.displayName,
+                style: Theme.of(sheetContext).textTheme.titleLarge,
+              ),
+              const SizedBox(height: AppSpacing.xs),
+              Text(
+                '${option.description}. Todavía no está disponible en tu zona; '
+                'mientras tanto puedes viajar con las unidades terrestres.',
+                style: Theme.of(sheetContext).textTheme.bodyLarge,
+              ),
+              const SizedBox(height: AppSpacing.md),
+              Align(
+                alignment: Alignment.centerRight,
+                child: TextButton(
+                  onPressed: () => Navigator.of(sheetContext).pop(),
+                  child: const Text('Entendido'),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
   }
 
-  Widget _content(BuildContext context) {
-    final route = state.route;
-    if (state.status == RideStatus.calculatingRoute) {
-      return const _Status(
-        title: 'Calculando tu ruta…',
-        detail: 'Estamos preparando las opciones para tu viaje.',
-        loading: true,
-      );
-    }
-    if (state.status == RideStatus.error) {
-      return _PlanningHeader(
-        destination: state.destination?.name ?? 'Destino',
-        metadata: '',
-        onBack: onBackToDestination,
+  Future<void> _changePayment(
+    BuildContext context,
+    WidgetRef ref,
+    RidePaymentOption current,
+  ) async {
+    final chosen = await showRidePaymentSheet(context, selected: current);
+    if (chosen == null) return;
+    controller.selectPayment(chosen);
+  }
+
+  /// Clock time the customer is expected to arrive: the wait for the vehicle
+  /// plus the route duration.
+  static String _arrivalLabel(
+    DateTime now,
+    RideRoute route,
+    RideOption option,
+  ) {
+    final arrival = now.add(
+      Duration(minutes: option.pickupMinutes) +
+          Duration(seconds: route.durationSeconds.round()),
+    );
+    return '${arrival.hour.toString().padLeft(2, '0')}:'
+        '${arrival.minute.toString().padLeft(2, '0')}';
+  }
+}
+
+/// Pinned bottom bar: how the ride is paid, and the single action that starts
+/// it.
+class _Footer extends StatelessWidget {
+  const _Footer({
+    required this.payment,
+    required this.onPaymentTap,
+    required this.onConfirm,
+  });
+
+  final RidePaymentOption payment;
+  final VoidCallback onPaymentTap;
+  final VoidCallback onConfirm;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: colors.surface,
+        border: Border(top: BorderSide(color: colors.outline)),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(
+          AppSpacing.md,
+          AppSpacing.xs,
+          AppSpacing.md,
+          AppSpacing.md,
+        ),
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
           children: [
-            const Text(
-              'No pudimos calcular la ruta',
-              style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700),
+            _PaymentRow(payment: payment, onTap: onPaymentTap),
+            const SizedBox(height: AppSpacing.sm),
+            SizedBox(
+              width: double.infinity,
+              height: 52,
+              child: FilledButton(
+                style: FilledButton.styleFrom(
+                  backgroundColor: AppColors.brandGreen,
+                  foregroundColor: AppColors.navy,
+                ),
+                onPressed: onConfirm,
+                child: const Text(
+                  'Confirmar viaje',
+                  style: TextStyle(fontWeight: FontWeight.w700),
+                ),
+              ),
             ),
             const SizedBox(height: AppSpacing.xs),
-            const Text('Inténtalo nuevamente o cambia tu destino.'),
-            const SizedBox(height: AppSpacing.md),
-            FilledButton(
-              onPressed: controller.retry,
-              child: const Text('Reintentar'),
+            Text(
+              'Puedes cancelar sin costo antes de confirmar.',
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.bodySmall
+                  ?.copyWith(color: colors.onSurfaceVariant),
             ),
           ],
         ),
-      );
-    }
-    if (state.status == RideStatus.planning) {
-      return _planning(context, route!);
-    }
-    if (state.status == RideStatus.searchingVehicle ||
-        state.status == RideStatus.vehicleAssigned ||
-        state.status == RideStatus.vehicleArriving ||
-        state.status == RideStatus.readyToBoard ||
-        state.status == RideStatus.inProgress ||
-        state.status == RideStatus.completed) {
-      return RideTrackingSurface(
-        state: state,
-        controller: controller,
-        onCancelRide: onBackToDestination,
-        onReturnHome: onReturnHome,
-      );
-    }
-    return const SizedBox.shrink();
+      ),
+    );
   }
+}
 
-  Widget _planning(BuildContext context, RideRoute route) => _PlanningHeader(
-    destination: state.destination!.name,
-    metadata:
-        '${(route.durationSeconds / 60).ceil()} min • ${(route.distanceMeters / 1000).toStringAsFixed(1)} km',
-    onBack: onBackToDestination,
-    child: Column(
-      children: [
-        const SizedBox(height: AppSpacing.md),
-        ..._planningOptions.map(
-          (option) => Padding(
-            padding: const EdgeInsets.only(bottom: AppSpacing.md),
-            child: _VehicleOptionCard(
-              option: option,
-              price: _fare(route.distanceMeters, option),
-              selected: state.option.id == option.id,
-              onTap: () => controller.selectOption(option),
-            ),
-          ),
-        ),
-        const SizedBox(height: AppSpacing.md),
-        Align(
-          alignment: Alignment.centerLeft,
-          child: Text(
-            'Método de pago',
-            style: TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.w700,
-              color: Theme.of(context).colorScheme.onSurface,
-            ),
-          ),
-        ),
-        const SizedBox(height: AppSpacing.sm),
-        _PaymentRow(payment: state.payment, onTap: () => _payment(context)),
-        const SizedBox(height: AppSpacing.lg),
-        SizedBox(
-          width: double.infinity,
-          height: 52,
-          child: FilledButton(
-            style: FilledButton.styleFrom(
-              backgroundColor: AppColors.brandGreen,
-              foregroundColor: Colors.white,
-            ),
-            onPressed: controller.confirm,
-            child: const Text('Confirmar viaje'),
-          ),
-        ),
-        const SizedBox(height: AppSpacing.sm),
-        Text(
-          'Puedes cancelar sin costo antes de confirmar.',
-          textAlign: TextAlign.center,
-          style: TextStyle(
-            fontSize: 12,
-            color: Theme.of(context).colorScheme.onSurfaceVariant,
-          ),
-        ),
-      ],
-    ),
-  );
+/// The usual affordance that this surface is a sheet sitting over the map.
+class _SheetGrabber extends StatelessWidget {
+  const _SheetGrabber();
 
-  void _payment(BuildContext context) => showModalBottomSheet<void>(
-    context: context,
-    builder: (sheetContext) => SafeArea(
-      child: Padding(
-        padding: const EdgeInsets.all(AppSpacing.md),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: paymentMethods
-              .map(
-                (payment) => ListTile(
-                  leading: const _PaymentBadge(),
-                  title: Text(payment.label),
-                  trailing: state.payment.id == payment.id
-                      ? const Icon(Icons.check, color: AppColors.brandGreen)
-                      : null,
-                  onTap: () {
-                    controller.selectPayment(payment);
-                    Navigator.pop(sheetContext);
-                  },
-                ),
-              )
-              .toList(),
-        ),
+  @override
+  Widget build(BuildContext context) => Center(
+    child: Container(
+      width: 44,
+      height: 4,
+      margin: const EdgeInsets.only(top: AppSpacing.sm),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.outline,
+        borderRadius: BorderRadius.circular(2),
       ),
     ),
   );
-  String _fare(double distance, RideOption option) =>
-      'RD\$${(85 + distance / 1000 * 42 + option.multiplier * 20).round()}';
 }
 
 class _PlanningHeader extends StatelessWidget {
@@ -217,11 +309,13 @@ class _PlanningHeader extends StatelessWidget {
     required this.destination,
     required this.metadata,
     required this.onBack,
-    required this.child,
+    this.child,
   });
   final String destination, metadata;
   final VoidCallback onBack;
-  final Widget child;
+
+  /// Content shown under the destination, when the state has any.
+  final Widget? child;
   @override
   Widget build(BuildContext context) => Column(
     crossAxisAlignment: CrossAxisAlignment.start,
@@ -260,164 +354,27 @@ class _PlanningHeader extends StatelessWidget {
           ),
         ],
       ),
-      child,
+      ?child,
     ],
   );
 }
 
-class _VehicleOptionCard extends StatelessWidget {
-  const _VehicleOptionCard({
-    required this.option,
-    required this.price,
-    required this.selected,
-    required this.onTap,
-  });
-  final RideOption option;
-  final String price;
-  final bool selected;
-  final VoidCallback onTap;
-  @override
-  Widget build(BuildContext context) {
-    final displayName = switch (option.id) {
-      'standard' => 'FLUIR',
-      'comfort' => 'FLUIR Comfort',
-      _ => 'FLUIR XL',
-    };
-    return Semantics(
-      selected: selected,
-      button: true,
-      label:
-          '$displayName, ${option.passengerCapacity} pasajeros, llega en ${option.pickupMinutes} min, $price',
-      child: InkWell(
-        key: Key('ride-option-${option.id}'),
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(AppRadius.medium),
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 180),
-          height: 126,
-          padding: const EdgeInsets.all(AppSpacing.md),
-          decoration: BoxDecoration(
-            color: selected
-                ? AppColors.brandGreen.withValues(alpha: .12)
-                : Theme.of(context).colorScheme.surface,
-            borderRadius: BorderRadius.circular(AppRadius.medium),
-            border: Border.all(
-              color: selected
-                  ? AppColors.brandGreen
-                  : Theme.of(context).colorScheme.outline,
-              width: selected ? 2 : 1,
-            ),
-            boxShadow: const [
-              BoxShadow(
-                color: Color(0x0A111827),
-                blurRadius: 10,
-                offset: Offset(0, 3),
-              ),
-            ],
-          ),
-          child: Row(
-            children: [
-              _VehicleImage(optionId: option.id),
-              const SizedBox(width: AppSpacing.md),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      displayName,
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                    const SizedBox(height: AppSpacing.xs),
-                    Text(
-                      '${option.passengerCapacity} pasajeros',
-                      style: TextStyle(
-                        fontSize: 13,
-                        color: Theme.of(context).colorScheme.onSurfaceVariant,
-                      ),
-                    ),
-                    const SizedBox(height: AppSpacing.xs),
-                    Text(
-                      'Llega en ${option.pickupMinutes} min',
-                      style: TextStyle(
-                        fontSize: 13,
-                        color: Theme.of(context).colorScheme.onSurfaceVariant,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  Text(
-                    price,
-                    style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w800,
-                      color: AppColors.brandGreen,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Icon(
-                    selected
-                        ? Icons.check_circle
-                        : Icons.radio_button_unchecked,
-                    size: 19,
-                    color: selected
-                        ? AppColors.brandGreen
-                        : Theme.of(context).colorScheme.outline,
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _VehicleImage extends StatelessWidget {
-  const _VehicleImage({required this.optionId});
-  final String optionId;
-  @override
-  Widget build(BuildContext context) {
-    final assetPath = switch (optionId) {
-      'standard' => 'assets/images/vehicles/fluir_standard.png',
-      'xl' => 'assets/images/vehicles/fluir_xl.png',
-      _ => 'assets/images/vehicles/fluir_comfort.png',
-    };
-    return SizedBox(
-      width: 132,
-      height: 94,
-      child: Image.asset(
-        assetPath,
-        fit: BoxFit.contain,
-        semanticLabel:
-            'Vehículo autónomo ${optionId == 'standard' ? 'FLUIR' : optionId}',
-      ),
-    );
-  }
-}
-
 class _PaymentRow extends StatelessWidget {
   const _PaymentRow({required this.payment, required this.onTap});
-  final PaymentMethod payment;
+  final RidePaymentOption payment;
   final VoidCallback onTap;
   @override
   Widget build(BuildContext context) => Semantics(
     button: true,
-    label: 'Método de pago ${payment.label}',
+    label: 'Método de pago ${payment.label}. Tocar para cambiar',
     child: InkWell(
+      key: const ValueKey('ride-payment-selector'),
       onTap: onTap,
       borderRadius: BorderRadius.circular(AppRadius.medium),
       child: Container(
         padding: const EdgeInsets.symmetric(
-          horizontal: AppSpacing.md,
-          vertical: AppSpacing.sm,
+          horizontal: AppSpacing.sm,
+          vertical: AppSpacing.xs,
         ),
         decoration: BoxDecoration(
           border: Border.all(color: Theme.of(context).colorScheme.outline),
@@ -425,11 +382,20 @@ class _PaymentRow extends StatelessWidget {
         ),
         child: Row(
           children: [
-            _PaymentBadge(),
+            if (payment.isCash)
+              const Icon(
+                Icons.payments_outlined,
+                size: 22,
+                color: AppColors.brandGreenInk,
+              )
+            else
+              PaymentMethodBrandMark(brand: payment.brand, size: .7),
             const SizedBox(width: AppSpacing.sm),
             Expanded(
               child: Text(
                 payment.label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
                 style: const TextStyle(fontWeight: FontWeight.w600),
               ),
             ),
@@ -439,28 +405,6 @@ class _PaymentRow extends StatelessWidget {
             ),
           ],
         ),
-      ),
-    ),
-  );
-}
-
-class _PaymentBadge extends StatelessWidget {
-  const _PaymentBadge();
-  @override
-  Widget build(BuildContext context) => Container(
-    width: 28,
-    height: 20,
-    alignment: Alignment.center,
-    decoration: BoxDecoration(
-      color: const Color(0xFF173F8A),
-      borderRadius: BorderRadius.circular(4),
-    ),
-    child: const Text(
-      'VISA',
-      style: TextStyle(
-        color: Colors.white,
-        fontSize: 7,
-        fontWeight: FontWeight.w700,
       ),
     ),
   );
@@ -476,6 +420,7 @@ class _Status extends StatelessWidget {
   final bool loading;
   @override
   Widget build(BuildContext context) => Column(
+    mainAxisSize: MainAxisSize.min,
     crossAxisAlignment: CrossAxisAlignment.start,
     children: [
       if (loading) const LinearProgressIndicator(),
