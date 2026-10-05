@@ -410,6 +410,29 @@ void main() {
       expect(repository.diagnostics.value.reconciliations, 2);
     });
 
+    test('a restarted watch keeps the customer channel subscribed', () async {
+      // What signing in again does: stop the watch and start a new one at
+      // once, before the old one has finished stopping.
+      final restarted = <TripSnapshot>[];
+      final stopping = subscription.cancel();
+      final again = repository.watchTrip(_ref).listen(restarted.add);
+      addTearDown(again.cancel);
+      await stopping;
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+
+      expect(realtime.isSubscribed(_userChannel), isTrue);
+      push(
+        RealtimeEvents.editTaxiOrder,
+        taxiOrderJson(status: 'driver_found', version: 2, workerId: 3),
+        RealtimeEventTypes.orderAccepted,
+      );
+      await _until(
+        () => restarted.any(
+          (trip) => trip.status == BackendTripStatus.driverFound,
+        ),
+      );
+    });
+
     test('cancelling the watch releases the connection', () async {
       await subscription.cancel();
       await _until(() => realtime.status == RealtimeStatus.idle);

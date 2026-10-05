@@ -41,6 +41,11 @@ class RemoteTripRepository implements TripRepository {
   );
   int _watchers = 0;
 
+  /// Watches per realtime channel. A restarted watch (e.g. after signing in
+  /// again) starts before the old one has finished stopping; only the last
+  /// watch to leave a channel unsubscribes it.
+  final _channelWatchers = <String, int>{};
+
   @override
   bool get quotesFromServer => true;
 
@@ -196,6 +201,11 @@ class _TripWatch {
     if (realtime != null && customerId != null) {
       final channel = RealtimeChannels.user(customerId);
       _channel = channel;
+      _repository._channelWatchers.update(
+        channel,
+        (count) => count + 1,
+        ifAbsent: () => 1,
+      );
       _subscriptions
         ..add(realtime.messages.listen(_onMessage))
         ..add(
@@ -222,7 +232,15 @@ class _TripWatch {
     }
     final realtime = _realtime;
     final channel = _channel;
-    if (realtime != null && channel != null) realtime.unsubscribe(channel);
+    if (realtime != null && channel != null) {
+      final remaining = (_repository._channelWatchers[channel] ?? 1) - 1;
+      if (remaining > 0) {
+        _repository._channelWatchers[channel] = remaining;
+      } else {
+        _repository._channelWatchers.remove(channel);
+        realtime.unsubscribe(channel);
+      }
+    }
     _repository._watchers--;
     if (_repository._watchers <= 0) {
       _repository._watchers = 0;
