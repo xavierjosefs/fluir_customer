@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -27,6 +28,7 @@ import '../widgets/home_services_panel.dart';
 import '../../../ride/presentation/controllers/ride_controller.dart';
 import '../../../ride/presentation/trip_providers.dart';
 import '../../../ride/presentation/widgets/ride_sheet.dart';
+import '../../../ride/presentation/widgets/trip_debug_panel.dart';
 import '../../../ride/domain/models/ride_models.dart';
 
 class HomeScreen extends ConsumerStatefulWidget {
@@ -248,6 +250,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                         onPressed: _mapController.recenter,
                       ),
                     ),
+            ),
+          if (kDebugMode)
+            Positioned(
+              left: 0,
+              top: MediaQuery.sizeOf(context).height * .28,
+              child: const TripDebugTab(),
             ),
           Positioned.fill(
             child: HomePreparationOverlay(
