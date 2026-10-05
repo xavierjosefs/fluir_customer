@@ -3,6 +3,7 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:mapbox_maps_flutter/mapbox_maps_flutter.dart';
 
 import '../../../../app/theme/app_colors.dart';
@@ -11,8 +12,12 @@ import '../../domain/models/destination_search_result.dart';
 import '../../domain/models/home_coordinate.dart';
 import '../../domain/models/nearby_vehicle.dart';
 import '../../../ride/domain/models/ride_route.dart';
+import '../../../ride/domain/models/trip.dart';
+import 'driver_marker_motion.dart';
 import 'home_map_lifecycle_callbacks.dart';
 import 'home_marker_images.dart';
+
+export 'driver_marker_motion.dart' show FluirMapController;
 
 typedef HomeMapSurfaceBuilder = Widget Function(
   BuildContext context,
@@ -31,6 +36,9 @@ class FluirMap extends StatefulWidget {
     this.destination,
     this.route,
     this.surfaceBuilder,
+    this.driverLocation,
+    this.followTarget,
+    this.mapController,
     super.key,
   });
 
@@ -42,11 +50,22 @@ class FluirMap extends StatefulWidget {
   final HomeMapLifecycleCallbacks lifecycle;
   final HomeMapSurfaceBuilder? surfaceBuilder;
 
+  /// The assigned driver's last known position; `null` hides the marker.
+  final DriverLocation? driverLocation;
+
+  /// What the camera keeps in view with the driver: the pickup before
+  /// boarding, the destination during the trip.
+  final HomeCoordinate? followTarget;
+
+  /// Follow / stop-following / recenter policy for the driver marker.
+  final FluirMapController? mapController;
+
   @override
   State<FluirMap> createState() => _FluirMapState();
 }
 
-class _FluirMapState extends State<FluirMap> {
+class _FluirMapState extends State<FluirMap>
+    with SingleTickerProviderStateMixin {
   MapboxMap? _mapboxMap;
   PointAnnotationManager? _pickupManager;
   PointAnnotationManager? _vehicleManager;
@@ -70,6 +89,38 @@ class _FluirMapState extends State<FluirMap> {
   int _renderedFrameSequence = 0;
   int? _annotationsReadyFrameSequence;
 
+  // Live driver marker: one annotation whose geometry glides between fixes.
+  PointAnnotationManager? _driverManager;
+  PointAnnotation? _driverAnnotation;
+  HomeCoordinate? _driverShown;
+  HomeCoordinate? _driverFrom;
+  HomeCoordinate? _driverTo;
+  Duration _driverGlide = Duration.zero;
+  Duration _lastGlideFrame = Duration.zero;
+  DateTime? _lastDriverFixAt;
+  Ticker? _driverTicker;
+  Timer? _freshnessTimer;
+  bool? _driverShownLive;
+  bool _driverFrameInFlight = false;
+  bool _followInFlight = false;
+  DateTime? _lastFollowCheck;
+  int _handledRecenters = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _handledRecenters = widget.mapController?.recenterRequests ?? 0;
+    widget.mapController?.addListener(_onMapControllerChanged);
+  }
+
+  @override
+  void dispose() {
+    widget.mapController?.removeListener(_onMapControllerChanged);
+    _driverTicker?.dispose();
+    _freshnessTimer?.cancel();
+    super.dispose();
+  }
+
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
@@ -89,6 +140,14 @@ class _FluirMapState extends State<FluirMap> {
     }
     if (oldWidget.route != widget.route && _styleLoaded) {
       _showRoute(widget.route);
+    }
+    if (oldWidget.mapController != widget.mapController) {
+      oldWidget.mapController?.removeListener(_onMapControllerChanged);
+      widget.mapController?.addListener(_onMapControllerChanged);
+      _handledRecenters = widget.mapController?.recenterRequests ?? 0;
+    }
+    if (oldWidget.driverLocation != widget.driverLocation && _styleLoaded) {
+      unawaited(_showDriver(widget.driverLocation));
     }
   }
 
@@ -181,6 +240,9 @@ class _FluirMapState extends State<FluirMap> {
             bearing: 0,
           ),
           onMapCreated: _onMapCreated,
+          // A customer who moves the map takes over the camera.
+          onScrollListener: (_) => widget.mapController?.stopFollowing(),
+          onZoomListener: (_) => widget.mapController?.stopFollowing(),
           onStyleLoadedListener: (_) => _onStyleLoaded(),
           onMapLoadedListener: (_) => _onMapLoaded(),
           onRenderFrameFinishedListener: (_) => _onRenderFrameFinished(),
@@ -240,6 +302,9 @@ class _FluirMapState extends State<FluirMap> {
       _pickupManager = null;
       _vehicleManager = null;
       _destinationManager = null;
+      _driverManager = null;
+      _driverAnnotation = null;
+      _driverTicker?.stop();
       _markersAdded = false;
       _baseAnnotationsReady = false;
     }
@@ -370,6 +435,9 @@ class _FluirMapState extends State<FluirMap> {
       if (widget.route != null) {
         await _showRoute(widget.route, fitCamera: false);
       }
+      if (widget.driverLocation != null) {
+        await _showDriver(widget.driverLocation);
+      }
     } catch (_) {
       _debugLog('Optional destination or route visual could not be restored.');
     }
@@ -478,6 +546,218 @@ class _FluirMapState extends State<FluirMap> {
     }
     return 15.7;
   }
+
+  /// Places, moves or removes the driver marker. Movement is animated
+  /// between fixes (never across more than 2 km), and the camera only moves
+  /// when the driver leaves the visible part of the map.
+  Future<void> _showDriver(DriverLocation? location) async {
+    final mapboxMap = _mapboxMap;
+    if (mapboxMap == null || !_styleLoaded) return;
+    if (location == null) {
+      _driverTicker?.stop();
+      _freshnessTimer?.cancel();
+      _freshnessTimer = null;
+      _driverFrom = _driverTo = _driverShown = null;
+      _lastDriverFixAt = null;
+      _driverShownLive = null;
+      final manager = _driverManager;
+      _driverAnnotation = null;
+      try {
+        await manager?.deleteAll();
+      } catch (_) {
+        // The marker goes with the next style load anyway.
+      }
+      return;
+    }
+    final target = location.coordinate;
+    final live = location.isFreshAt(DateTime.now());
+    try {
+      _driverManager ??= await mapboxMap.annotations
+          .createPointAnnotationManager();
+      _vehicleImage ??= await HomeMarkerImages.vehicle();
+      final manager = _driverManager!;
+      final annotation = _driverAnnotation;
+      _freshnessTimer ??= Timer.periodic(
+        const Duration(seconds: 5),
+        (_) => unawaited(_refreshDriverFreshness()),
+      );
+      if (annotation == null) {
+        _driverAnnotation = await manager.create(
+          PointAnnotationOptions(
+            geometry: _point(target),
+            image: _vehicleImage!,
+            iconRotate: location.heading,
+            iconOpacity: _driverOpacity(live),
+            iconAnchor: IconAnchor.CENTER,
+            symbolSortKey: 10,
+          ),
+        );
+        _driverShown = target;
+        _driverShownLive = live;
+        _lastDriverFixAt = DateTime.now();
+        if (widget.mapController?.followingDriver ?? false) {
+          await _fitDriver();
+        }
+        return;
+      }
+      annotation
+        ..iconRotate = location.heading ?? annotation.iconRotate
+        ..iconOpacity = _driverOpacity(live);
+      _driverShownLive = live;
+      final from = _driverShown ?? target;
+      final now = DateTime.now();
+      final sinceLastFix = _lastDriverFixAt == null
+          ? DriverMarkerMotion.maxDuration
+          : now.difference(_lastDriverFixAt!);
+      _lastDriverFixAt = now;
+      if (DriverMarkerMotion.shouldAnimate(from, target)) {
+        _driverFrom = from;
+        _driverTo = target;
+        _driverGlide = DriverMarkerMotion.durationFor(sinceLastFix);
+        _lastGlideFrame = Duration.zero;
+        _driverTicker ??= createTicker(_onDriverFrame);
+        _driverTicker!
+          ..stop()
+          ..start();
+      } else {
+        _driverTicker?.stop();
+        _driverTo = target;
+        _driverShown = target;
+        annotation.geometry = _point(target);
+        await manager.update(annotation);
+      }
+      unawaited(_followDriver(target));
+    } catch (_) {
+      _debugLog('Driver marker could not be updated.');
+    }
+  }
+
+  void _onDriverFrame(Duration elapsed) {
+    final from = _driverFrom;
+    final to = _driverTo;
+    final annotation = _driverAnnotation;
+    final manager = _driverManager;
+    if (from == null || to == null || annotation == null || manager == null) {
+      _driverTicker?.stop();
+      return;
+    }
+    final done = elapsed >= _driverGlide;
+    // ~25 positions per second are smooth for a car and spare the channel.
+    if (!done &&
+        (_driverFrameInFlight ||
+            elapsed - _lastGlideFrame < const Duration(milliseconds: 40))) {
+      return;
+    }
+    _lastGlideFrame = elapsed;
+    final progress = _driverGlide.inMicroseconds == 0
+        ? 1.0
+        : elapsed.inMicroseconds / _driverGlide.inMicroseconds;
+    final position = DriverMarkerMotion.lerp(from, to, progress);
+    _driverShown = position;
+    annotation.geometry = _point(position);
+    _driverFrameInFlight = true;
+    manager
+        .update(annotation)
+        .catchError((Object _) {})
+        .whenComplete(() => _driverFrameInFlight = false);
+    if (done) _driverTicker?.stop();
+  }
+
+  /// A position that stops updating is dimmed rather than shown as live.
+  Future<void> _refreshDriverFreshness() async {
+    final location = widget.driverLocation;
+    final annotation = _driverAnnotation;
+    final manager = _driverManager;
+    if (location == null || annotation == null || manager == null) return;
+    final live = location.isFreshAt(DateTime.now());
+    if (live == _driverShownLive) return;
+    _driverShownLive = live;
+    annotation.iconOpacity = _driverOpacity(live);
+    try {
+      await manager.update(annotation);
+    } catch (_) {
+      // Cosmetic only.
+    }
+  }
+
+  static double _driverOpacity(bool live) => live ? 1 : .5;
+
+  void _onMapControllerChanged() {
+    final controller = widget.mapController;
+    if (controller == null ||
+        controller.recenterRequests == _handledRecenters) {
+      return;
+    }
+    _handledRecenters = controller.recenterRequests;
+    unawaited(_fitDriver());
+  }
+
+  /// While following, re-frame only when the driver leaves the comfortable
+  /// part of the visible map (checked at most once per second).
+  Future<void> _followDriver(HomeCoordinate driver) async {
+    final mapboxMap = _mapboxMap;
+    final controller = widget.mapController;
+    if (mapboxMap == null ||
+        controller == null ||
+        !controller.followingDriver ||
+        _followInFlight) {
+      return;
+    }
+    final now = DateTime.now();
+    final last = _lastFollowCheck;
+    if (last != null && now.difference(last) < const Duration(seconds: 1)) {
+      return;
+    }
+    _lastFollowCheck = now;
+    try {
+      final camera = await mapboxMap.getCameraState();
+      final bounds = await mapboxMap.coordinateBoundsForCamera(
+        CameraOptions(
+          center: camera.center,
+          zoom: camera.zoom,
+          bearing: camera.bearing,
+          pitch: camera.pitch,
+        ),
+      );
+      final outside = DriverMarkerMotion.outsideComfortArea(
+        driver: driver,
+        southWest: _coordinate(bounds.southwest),
+        northEast: _coordinate(bounds.northeast),
+      );
+      if (outside) await _fitDriver();
+    } catch (_) {
+      // Following is a convenience; the marker is still correct.
+    }
+  }
+
+  /// Frames the driver together with [FluirMap.followTarget].
+  Future<void> _fitDriver() async {
+    final mapboxMap = _mapboxMap;
+    final driver =
+        _driverTo ?? _driverShown ?? widget.driverLocation?.coordinate;
+    if (mapboxMap == null || driver == null || _followInFlight) return;
+    _followInFlight = true;
+    try {
+      final target = widget.followTarget;
+      final options = await mapboxMap.cameraForCoordinatesPadding(
+        [driver, ?target].map(_point).toList(growable: false),
+        CameraOptions(pitch: 0, bearing: 0),
+        MbxEdgeInsets(top: 170, left: 56, bottom: 380, right: 56),
+        16,
+        null,
+      );
+      await mapboxMap.easeTo(options, MapAnimationOptions(duration: 700));
+    } catch (_) {
+      _debugLog('Driver camera could not be framed.');
+    } finally {
+      _followInFlight = false;
+    }
+  }
+
+  static HomeCoordinate _coordinate(Point point) => HomeCoordinate(
+    latitude: point.coordinates.lat.toDouble(),
+    longitude: point.coordinates.lng.toDouble(),
+  );
 
   void _reportFailure(String message) {
     if (_failureReported) {

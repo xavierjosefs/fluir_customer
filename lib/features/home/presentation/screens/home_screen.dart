@@ -49,6 +49,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
   /// Coming back to the app re-reads the trip from its source of truth.
   late final AppLifecycleListener _lifecycle;
+
+  /// Follows the assigned driver until the customer moves the map.
+  final _mapController = FluirMapController();
   int _mapGeneration = 0;
   HomeServicesSheetMode _sheetMode = HomeServicesSheetMode.medium;
 
@@ -67,6 +70,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   @override
   void dispose() {
     _lifecycle.dispose();
+    _mapController.dispose();
     _timeout?.cancel();
     _servicesSheetController.removeListener(
       _updateServiceSelectionPresentation,
@@ -89,6 +93,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     final syncStatus = ref.watch(
       tripSyncProvider.select((sync) => sync.status),
     );
+    // The driver marker exists only while a driver is on the trip.
+    final driverLocation = ride.status.hasAssignedVehicle
+        ? ride.trip?.driverLocation
+        : null;
+    final followTarget = ride.status == RideStatus.inProgress
+        ? ride.trip?.destination?.coordinate ?? ride.destination?.coordinate
+        : ride.trip?.pickup?.coordinate ?? ride.origin;
     final readinessController = ref.read(
       homeReadinessControllerProvider.notifier,
     );
@@ -96,6 +107,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         ? MediaQuery.viewPaddingOf(context).bottom
         : FluirAppShell.navigationHeight +
               MediaQuery.viewPaddingOf(context).bottom;
+
+    ref.listen(rideControllerProvider.select((ride) => ride.trip?.ref), (
+      previous,
+      next,
+    ) {
+      if (next != null && next != previous) _mapController.resetFollowing();
+    });
 
     ref.listen(homeReadinessControllerProvider, (previous, next) {
       if (next.isReady || next.hasFailed) {
@@ -133,6 +151,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             route: ride.route,
             lifecycle: lifecycle,
             surfaceBuilder: mapSurfaceBuilder,
+            driverLocation: driverLocation,
+            followTarget: followTarget,
+            mapController: _mapController,
           ),
           // The ride sheet carries its own destination header and back action,
           // so the Home search overlay would only repeat it.
@@ -214,6 +235,19 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                   ref.read(selectedDestinationProvider.notifier).clear();
                 },
               ),
+            ),
+          if (driverLocation != null)
+            ListenableBuilder(
+              listenable: _mapController,
+              builder: (context, _) => _mapController.followingDriver
+                  ? const SizedBox.shrink()
+                  : Positioned(
+                      top: MediaQuery.paddingOf(context).top + AppSpacing.sm,
+                      right: AppSpacing.md,
+                      child: _RecenterButton(
+                        onPressed: _mapController.recenter,
+                      ),
+                    ),
             ),
           Positioned.fill(
             child: HomePreparationOverlay(
@@ -379,4 +413,36 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       ),
     );
   }
+}
+
+/// Brings the driver back into view and resumes following them.
+class _RecenterButton extends StatelessWidget {
+  const _RecenterButton({required this.onPressed});
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) => Material(
+    color: Colors.white,
+    shape: const StadiumBorder(),
+    elevation: 2,
+    child: InkWell(
+      key: const ValueKey('map-recenter-driver'),
+      customBorder: const StadiumBorder(),
+      onTap: onPressed,
+      child: const Padding(
+        padding: EdgeInsets.symmetric(
+          horizontal: AppSpacing.sm,
+          vertical: AppSpacing.xs,
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.my_location, size: 18, color: AppColors.brandBlue),
+            SizedBox(width: AppSpacing.xxs),
+            Text('Centrar', style: TextStyle(fontWeight: FontWeight.w600)),
+          ],
+        ),
+      ),
+    ),
+  );
 }
