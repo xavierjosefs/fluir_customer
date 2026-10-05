@@ -1,10 +1,13 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_radius.dart';
 import '../../../../app/theme/app_spacing.dart';
 import '../../domain/models/ride_models.dart';
-import '../../domain/ride_fare.dart';
+import '../../domain/models/trip.dart';
+import '../../domain/repositories/trip_repository.dart';
 import '../controllers/ride_controller.dart';
 import 'ride_receipt.dart';
 
@@ -14,6 +17,7 @@ class RideTrackingSurface extends StatefulWidget {
     required this.controller,
     required this.onCancelRide,
     required this.onReturnHome,
+    this.syncStatus,
     super.key,
   });
 
@@ -21,6 +25,9 @@ class RideTrackingSurface extends StatefulWidget {
   final RideController controller;
   final VoidCallback onCancelRide;
   final VoidCallback onReturnHome;
+
+  /// How fresh the trip is; `null` for the local simulation and previews.
+  final TripSyncStatus? syncStatus;
 
   @override
   State<RideTrackingSurface> createState() => _RideTrackingSurfaceState();
@@ -49,10 +56,12 @@ class _RideTrackingSurfaceState extends State<RideTrackingSurface>
 
   RideState get state => widget.state;
   RideController get controller => widget.controller;
+  bool get _human => state.hasHumanDriver;
 
   @override
   Widget build(BuildContext context) {
     if (_receipt) return _receiptScreen(context);
+    final banner = _bannerText();
     return SafeArea(
       child: Stack(
         children: [
@@ -61,25 +70,59 @@ class _RideTrackingSurfaceState extends State<RideTrackingSurface>
             left: AppSpacing.md,
             child: _TopBackButton(onTap: _backAction),
           ),
+          if (banner != null)
+            Positioned(
+              top: AppSpacing.sm + 6,
+              left: 72,
+              right: 72,
+              child: _SyncBanner(text: banner),
+            ),
           if (state.status == RideStatus.searchingVehicle) ...[
             Positioned.fill(
               child: _SearchingMapOverlay(controller: _pulseController),
             ),
-            const Positioned(
+            Positioned(
               top: AppSpacing.xxl,
               left: AppSpacing.lg,
               right: AppSpacing.lg,
               child: Text(
-                'Buscando vehículo',
+                _searchingTitle,
                 textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 21, fontWeight: FontWeight.w700),
+                style: const TextStyle(
+                  fontSize: 21,
+                  fontWeight: FontWeight.w700,
+                ),
               ),
             ),
-            const Align(alignment: Alignment(0, .72), child: _SearchingCopy()),
+            Align(
+              alignment: const Alignment(0, .72),
+              child: _SearchingCopy(
+                title: _searchingTitle,
+                detail: _human
+                    ? 'Estamos buscando un conductor cerca de ti.'
+                    : 'Estamos buscando el mejor vehículo para ti.',
+                message: state.message,
+                cancelling: state.isCancelling,
+                onCancel: _human ? () => _confirmCancellation(context) : null,
+              ),
+            ),
           ] else ...[
             Align(
               alignment: Alignment.bottomCenter,
-              child: _TrackingPanel(child: _trackingContent(context)),
+              child: _TrackingPanel(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    if (state.message != null &&
+                        state.status != RideStatus.cancelled) ...[
+                      _InlineMessage(text: state.message!),
+                      const SizedBox(height: AppSpacing.sm),
+                    ],
+                    _trackingContent(context),
+                  ],
+                ),
+              ),
             ),
           ],
         ],
@@ -87,7 +130,51 @@ class _RideTrackingSurfaceState extends State<RideTrackingSurface>
     );
   }
 
+  String get _searchingTitle =>
+      _human ? 'Buscando conductor' : 'Buscando vehículo';
+
+  /// Only live backend trips can fall behind; say so instead of freezing.
+  String? _bannerText() {
+    final trip = state.trip;
+    if (!_human || trip == null || trip.isTerminal) return null;
+    return switch (widget.syncStatus) {
+      TripSyncStatus.reconnecting => 'Reconectando…',
+      TripSyncStatus.polling => 'Actualizando sin tiempo real',
+      _ => null,
+    };
+  }
+
   Widget _trackingContent(BuildContext context) {
+    if (_human) {
+      switch (state.status) {
+        case RideStatus.vehicleAssigned:
+          return _DriverStage(
+            title: 'Conductor encontrado',
+            subtitle: state.trip?.driver?.displayName == null
+                ? 'Un conductor aceptó tu viaje.'
+                : '${state.trip!.driver!.displayName} aceptó tu viaje.',
+            state: state,
+            onCancel: () => _confirmCancellation(context),
+          );
+        case RideStatus.vehicleArriving:
+          return _DriverStage(
+            title: 'Tu conductor va en camino',
+            subtitle: 'Se dirige al punto de recogida.',
+            state: state,
+            showEta: true,
+            onCancel: () => _confirmCancellation(context),
+          );
+        case RideStatus.readyToBoard:
+          return _DriverStage(
+            title: 'Tu conductor llegó',
+            subtitle: 'Te espera en el punto de recogida.',
+            state: state,
+            onCancel: () => _confirmCancellation(context),
+          );
+        default:
+          break;
+      }
+    }
     switch (state.status) {
       case RideStatus.vehicleAssigned:
         return _VehicleStage(
@@ -126,16 +213,53 @@ class _RideTrackingSurfaceState extends State<RideTrackingSurface>
           onRate: controller.rate,
           onDone: () => setState(() => _receipt = true),
         );
+      case RideStatus.noDriverFound:
+        return _OutcomeStage(
+          icon: Icons.person_search_outlined,
+          title: 'No encontramos conductor',
+          subtitle:
+              'No hay conductores disponibles en este momento. '
+              'Puedes buscar de nuevo.',
+          primary: 'Buscar de nuevo',
+          busy: state.isSubmitting,
+          onPrimary: controller.retrySearch,
+          secondary: 'Cancelar solicitud',
+          onSecondary: state.isCancelling
+              ? null
+              : () => _confirmCancellation(context),
+        );
+      case RideStatus.cancelled:
+        final byDriver = state.trip?.canceledBy == 'worker';
+        return _OutcomeStage(
+          icon: Icons.event_busy_outlined,
+          title: byDriver
+              ? 'El conductor canceló el viaje'
+              : 'El viaje fue cancelado',
+          subtitle: byDriver
+              ? 'Puedes pedir otro viaje al mismo destino.'
+              : 'Este viaje ya no está activo. Puedes pedir otro.',
+          primary: 'Pedir otro viaje',
+          onPrimary: controller.requestAgain,
+          secondary: 'Volver al inicio',
+          onSecondary: widget.onReturnHome,
+        );
       default:
         return const SizedBox.shrink();
     }
   }
 
   void _backAction() {
-    if (state.status == RideStatus.searchingVehicle ||
-        state.status == RideStatus.vehicleAssigned ||
-        state.status == RideStatus.vehicleArriving) {
-      _confirmCancellation(context);
+    switch (state.status) {
+      case RideStatus.searchingVehicle ||
+          RideStatus.vehicleAssigned ||
+          RideStatus.vehicleArriving:
+        _confirmCancellation(context);
+      case RideStatus.readyToBoard || RideStatus.noDriverFound when _human:
+        _confirmCancellation(context);
+      case RideStatus.cancelled:
+        widget.onReturnHome();
+      default:
+        break;
     }
   }
 
@@ -170,7 +294,7 @@ class _RideTrackingSurfaceState extends State<RideTrackingSurface>
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              state.vehicleId ?? 'FLUIR-001',
+              _vehicleLabel(state),
               style: Theme.of(context).textTheme.titleLarge,
             ),
             Text('${_displayName(state.option)} · Blanco'),
@@ -205,7 +329,7 @@ class _RideTrackingSurfaceState extends State<RideTrackingSurface>
             ),
             const SizedBox(height: AppSpacing.sm),
             Text(
-              'Mi vehículo autónomo ${state.vehicleId ?? 'FLUIR-001'} está en camino.',
+              'Mi vehículo autónomo ${_vehicleLabel(state)} está en camino.',
             ),
             Align(
               alignment: Alignment.centerRight,
@@ -236,10 +360,12 @@ class _RideTrackingSurfaceState extends State<RideTrackingSurface>
 
   void _showHelp(BuildContext context) => showModalBottomSheet<void>(
     context: context,
-    builder: (sheetContext) => const SafeArea(
+    builder: (sheetContext) => SafeArea(
       child: Padding(
-        padding: EdgeInsets.all(AppSpacing.lg),
-        child: Text('Ayuda para tu viaje autónomo'),
+        padding: const EdgeInsets.all(AppSpacing.lg),
+        child: Text(
+          _human ? 'Ayuda para tu viaje' : 'Ayuda para tu viaje autónomo',
+        ),
       ),
     ),
   );
@@ -269,9 +395,12 @@ class _RideTrackingSurfaceState extends State<RideTrackingSurface>
             const SizedBox(height: AppSpacing.sm),
             const Text('Fluir · Viaje completado'),
             const SizedBox(height: AppSpacing.xs),
-            Text('Destino: ${state.destination!.name}'),
+            Text('Destino: ${state.destination?.name ?? 'Destino'}'),
             Text('Total: ${formatRideFare(state)}'),
-            Text('Vehículo: ${state.vehicleId ?? 'FLUIR-001'}'),
+            if (_human)
+              Text('Conductor: ${_driverName(state.trip?.driver)}')
+            else
+              Text('Vehículo: ${_vehicleLabel(state)}'),
             const SizedBox(height: AppSpacing.md),
             Align(
               alignment: Alignment.centerRight,
@@ -299,6 +428,68 @@ class _TopBackButton extends StatelessWidget {
       onPressed: onTap,
       icon: const Icon(Icons.arrow_back_ios_new, size: 18),
       tooltip: 'Opciones del viaje',
+    ),
+  );
+}
+
+/// "Reconectando…": the trip on screen may be a few seconds behind.
+class _SyncBanner extends StatelessWidget {
+  const _SyncBanner({required this.text});
+  final String text;
+  @override
+  Widget build(BuildContext context) => Semantics(
+    liveRegion: true,
+    child: Center(
+      child: Container(
+        key: const ValueKey('ride-sync-banner'),
+        padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.sm,
+          vertical: AppSpacing.xxs,
+        ),
+        decoration: BoxDecoration(
+          color: AppColors.navy.withValues(alpha: .88),
+          borderRadius: BorderRadius.circular(99),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const SizedBox.square(
+              dimension: 12,
+              child: CircularProgressIndicator(
+                strokeWidth: 1.6,
+                color: Colors.white,
+              ),
+            ),
+            const SizedBox(width: AppSpacing.xs),
+            Flexible(
+              child: Text(
+                text,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(color: Colors.white, fontSize: 13),
+              ),
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
+}
+
+class _InlineMessage extends StatelessWidget {
+  const _InlineMessage({required this.text});
+  final String text;
+  @override
+  Widget build(BuildContext context) => Semantics(
+    liveRegion: true,
+    child: Container(
+      key: const ValueKey('ride-inline-message'),
+      padding: const EdgeInsets.all(AppSpacing.sm),
+      decoration: BoxDecoration(
+        color: AppColors.warning.withValues(alpha: .12),
+        borderRadius: BorderRadius.circular(AppRadius.medium),
+      ),
+      child: Text(text),
     ),
   );
 }
@@ -347,21 +538,29 @@ class _PulseCircle extends StatelessWidget {
 }
 
 class _SearchingCopy extends StatelessWidget {
-  const _SearchingCopy();
+  const _SearchingCopy({
+    required this.title,
+    required this.detail,
+    this.message,
+    this.cancelling = false,
+    this.onCancel,
+  });
+  final String title;
+  final String detail;
+  final String? message;
+  final bool cancelling;
+  final VoidCallback? onCancel;
   @override
   Widget build(BuildContext context) => _TrackingPanel(
     child: Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        const Text(
-          'Buscando vehículo',
-          style: TextStyle(fontSize: 22, fontWeight: FontWeight.w700),
+        Text(
+          title,
+          style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w700),
         ),
         const SizedBox(height: AppSpacing.sm),
-        const Text(
-          'Estamos buscando el mejor vehículo para ti.',
-          textAlign: TextAlign.center,
-        ),
+        Text(detail, textAlign: TextAlign.center),
         const SizedBox(height: AppSpacing.md),
         SizedBox(
           width: 54,
@@ -369,6 +568,18 @@ class _SearchingCopy extends StatelessWidget {
             borderRadius: BorderRadius.circular(5),
           ),
         ),
+        if (message != null) ...[
+          const SizedBox(height: AppSpacing.md),
+          _InlineMessage(text: message!),
+        ],
+        if (onCancel != null) ...[
+          const SizedBox(height: AppSpacing.sm),
+          TextButton(
+            key: const ValueKey('ride-cancel-request'),
+            onPressed: cancelling ? null : onCancel,
+            child: Text(cancelling ? 'Cancelando…' : 'Cancelar solicitud'),
+          ),
+        ],
       ],
     ),
   );
@@ -439,7 +650,7 @@ class _VehicleStage extends StatelessWidget {
                   ),
                 ),
                 Text(
-                  state.vehicleId ?? 'FLUIR-001',
+                  _vehicleLabel(state),
                   style: const TextStyle(
                     color: AppColors.brandGreen,
                     fontWeight: FontWeight.w700,
@@ -478,6 +689,202 @@ class _VehicleStage extends StatelessWidget {
   );
 }
 
+/// A Fluir Workers driver: who they are, what they drive and where they are.
+/// Missing data gets a neutral label, never an invented value.
+class _DriverStage extends StatelessWidget {
+  const _DriverStage({
+    required this.title,
+    required this.subtitle,
+    required this.state,
+    required this.onCancel,
+    this.showEta = false,
+  });
+  final String title, subtitle;
+  final RideState state;
+  final VoidCallback onCancel;
+  final bool showEta;
+
+  @override
+  Widget build(BuildContext context) {
+    final driver = state.trip?.driver;
+    final location = state.trip?.driverLocation;
+    final now = DateTime.now();
+    final eta = showEta ? _etaMinutes(location, state.trip?.pickup, now) : null;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          title,
+          style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w700),
+        ),
+        const SizedBox(height: AppSpacing.xs),
+        Text(subtitle, style: const TextStyle(color: AppColors.textSecondary)),
+        const SizedBox(height: AppSpacing.md),
+        Row(
+          children: [
+            _DriverAvatar(driver: driver),
+            const SizedBox(width: AppSpacing.md),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Flexible(
+                        child: Text(
+                          _driverName(driver),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                      if (driver?.rating != null) ...[
+                        const SizedBox(width: AppSpacing.xs),
+                        const Icon(
+                          Icons.star,
+                          size: 16,
+                          color: AppColors.brandGreen,
+                        ),
+                        Text(
+                          driver!.rating!.toStringAsFixed(1),
+                          style: const TextStyle(fontWeight: FontWeight.w600),
+                        ),
+                      ],
+                    ],
+                  ),
+                  Text(
+                    driver?.carModel ?? 'Vehículo sin especificar',
+                    style: const TextStyle(color: AppColors.textSecondary),
+                  ),
+                  Text(
+                    driver?.licensePlate == null
+                        ? 'Placa no disponible'
+                        : 'Placa ${driver!.licensePlate}',
+                    style: const TextStyle(
+                      color: AppColors.brandGreen,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  if (eta != null)
+                    Text(
+                      'Llega en ~$eta min',
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  _LocationFreshness(location: location, now: now),
+                ],
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: AppSpacing.lg),
+        SizedBox(
+          width: double.infinity,
+          height: 50,
+          child: OutlinedButton(
+            key: const ValueKey('ride-cancel-trip'),
+            onPressed: state.isCancelling ? null : onCancel,
+            child: Text(state.isCancelling ? 'Cancelando…' : 'Cancelar viaje'),
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// Straight-line distance × 1.3 at 25 km/h: a rough city estimate, only
+  /// from a live position.
+  static int? _etaMinutes(
+    DriverLocation? location,
+    TripPlace? pickup,
+    DateTime now,
+  ) {
+    if (location == null || pickup == null || !location.isFreshAt(now)) {
+      return null;
+    }
+    final meters = _distanceMeters(
+      location.coordinate.latitude,
+      location.coordinate.longitude,
+      pickup.coordinate.latitude,
+      pickup.coordinate.longitude,
+    );
+    return math.max(1, (meters * 1.3 / (25000 / 60)).ceil());
+  }
+}
+
+class _LocationFreshness extends StatelessWidget {
+  const _LocationFreshness({required this.location, required this.now});
+  final DriverLocation? location;
+  final DateTime now;
+
+  @override
+  Widget build(BuildContext context) {
+    final at = location?.recordedAt;
+    final String text;
+    final Color color;
+    if (location == null || at == null) {
+      text = 'Esperando la ubicación del conductor';
+      color = AppColors.textSecondary;
+    } else if (location!.isFreshAt(now)) {
+      text = 'Ubicación en vivo';
+      color = AppColors.brandGreenInk;
+    } else {
+      final age = now.difference(at);
+      text = age.inMinutes >= 1
+          ? 'Ubicación sin actualizar (hace ${age.inMinutes} min)'
+          : 'Ubicación sin actualizar (hace ${age.inSeconds} s)';
+      color = AppColors.warning;
+    }
+    return Text(
+      text,
+      key: const ValueKey('ride-driver-location-freshness'),
+      style: TextStyle(fontSize: 12, color: color),
+    );
+  }
+}
+
+class _DriverAvatar extends StatelessWidget {
+  const _DriverAvatar({required this.driver});
+  final TripDriver? driver;
+
+  @override
+  Widget build(BuildContext context) {
+    final name = driver?.displayName;
+    final initial = name?.characters.first.toUpperCase();
+    final fallback = CircleAvatar(
+      radius: 30,
+      backgroundColor: AppColors.brandBlue.withValues(alpha: .12),
+      child: initial == null
+          ? const Icon(Icons.person_outline, color: AppColors.brandBlue)
+          : Text(
+              initial,
+              style: const TextStyle(
+                fontSize: 22,
+                fontWeight: FontWeight.w700,
+                color: AppColors.brandBlue,
+              ),
+            ),
+    );
+    final url = driver?.avatarUrl;
+    if (url == null) return fallback;
+    return ClipOval(
+      child: Image.network(
+        url,
+        width: 60,
+        height: 60,
+        fit: BoxFit.cover,
+        semanticLabel: 'Foto del conductor',
+        errorBuilder: (_, _, _) => fallback,
+      ),
+    );
+  }
+}
+
 class _TrackingVehicleImage extends StatelessWidget {
   const _TrackingVehicleImage({required this.optionId});
   final String optionId;
@@ -501,72 +908,93 @@ class _TripProgress extends StatelessWidget {
   final RideState state;
   final VoidCallback onHelp;
   @override
-  Widget build(BuildContext context) => Column(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    mainAxisSize: MainAxisSize.min,
-    children: [
-      const Text(
-        'En viaje',
-        style: TextStyle(fontSize: 22, fontWeight: FontWeight.w700),
-      ),
-      const SizedBox(height: AppSpacing.xs),
-      const Text(
-        'Disfruta tu viaje.',
-        style: TextStyle(color: AppColors.textSecondary),
-      ),
-      const SizedBox(height: AppSpacing.lg),
-      Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Column(
-            children: [
-              const Icon(Icons.circle_outlined, color: AppColors.brandGreen),
-              Container(width: 2, height: 38, color: AppColors.brandGreen),
-              const Icon(
-                Icons.location_on_outlined,
-                color: AppColors.textSecondary,
-              ),
-            ],
+  Widget build(BuildContext context) {
+    final atDestination = state.atDestination;
+    final driver = state.trip?.driver;
+    final duration = state.durationSeconds;
+    final distance = state.distanceMeters;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          atDestination ? 'Llegaste a tu destino' : 'En viaje',
+          style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w700),
+        ),
+        const SizedBox(height: AppSpacing.xs),
+        Text(
+          atDestination
+              ? 'Tu conductor está finalizando el viaje.'
+              : 'Disfruta tu viaje.',
+          style: const TextStyle(color: AppColors.textSecondary),
+        ),
+        if (state.hasHumanDriver) ...[
+          const SizedBox(height: AppSpacing.xs),
+          Text(
+            [
+              _driverName(driver),
+              if (driver?.licensePlate != null) 'Placa ${driver!.licensePlate}',
+            ].join(' · '),
+            style: const TextStyle(fontWeight: FontWeight.w600),
           ),
-          const SizedBox(width: AppSpacing.md),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+        ],
+        const SizedBox(height: AppSpacing.lg),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Column(
               children: [
-                const Text(
-                  'Inicio',
-                  style: TextStyle(fontWeight: FontWeight.w700),
-                ),
-                const SizedBox(height: 26),
-                Text(
-                  state.destination!.name,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontWeight: FontWeight.w700),
-                ),
-                const Text(
-                  'Destino',
-                  style: TextStyle(color: AppColors.textSecondary),
+                const Icon(Icons.circle_outlined, color: AppColors.brandGreen),
+                Container(width: 2, height: 38, color: AppColors.brandGreen),
+                const Icon(
+                  Icons.location_on_outlined,
+                  color: AppColors.textSecondary,
                 ),
               ],
             ),
+            const SizedBox(width: AppSpacing.md),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Inicio',
+                    style: TextStyle(fontWeight: FontWeight.w700),
+                  ),
+                  const SizedBox(height: 26),
+                  Text(
+                    state.destination?.name ?? 'Destino',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontWeight: FontWeight.w700),
+                  ),
+                  const Text(
+                    'Destino',
+                    style: TextStyle(color: AppColors.textSecondary),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        if (duration != null && distance != null) ...[
+          const SizedBox(height: AppSpacing.lg),
+          Center(
+            child: Text(
+              '${(duration / 60).ceil()} min  •  '
+              '${(distance / 1000).toStringAsFixed(1)} km',
+              style: const TextStyle(fontWeight: FontWeight.w700),
+            ),
           ),
         ],
-      ),
-      const SizedBox(height: AppSpacing.lg),
-      Center(
-        child: Text(
-          '${(state.route!.durationSeconds / 60).ceil()} min  •  ${(state.route!.distanceMeters / 1000).toStringAsFixed(1)} km',
-          style: const TextStyle(fontWeight: FontWeight.w700),
+        const SizedBox(height: AppSpacing.md),
+        SizedBox(
+          width: double.infinity,
+          child: OutlinedButton(onPressed: onHelp, child: const Text('Ayuda')),
         ),
-      ),
-      const SizedBox(height: AppSpacing.md),
-      SizedBox(
-        width: double.infinity,
-        child: OutlinedButton(onPressed: onHelp, child: const Text('Ayuda')),
-      ),
-    ],
-  );
+      ],
+    );
+  }
 }
 
 class _CompletedTrip extends StatelessWidget {
@@ -594,7 +1022,7 @@ class _CompletedTrip extends StatelessWidget {
         ),
         const SizedBox(height: AppSpacing.lg),
         Text(
-          _fare(state),
+          formatRideFare(state),
           textAlign: TextAlign.center,
           style: const TextStyle(fontSize: 32, fontWeight: FontWeight.w800),
         ),
@@ -603,6 +1031,13 @@ class _CompletedTrip extends StatelessWidget {
           (state.payment ?? RidePaymentOption.cash).label,
           textAlign: TextAlign.center,
         ),
+        // No payment is processed yet: never claim this ride was paid.
+        if (!(state.trip?.paymentCompleted ?? false))
+          const Text(
+            'Pago pendiente',
+            textAlign: TextAlign.center,
+            style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
+          ),
         const SizedBox(height: AppSpacing.lg),
         const Text(
           'Califica tu experiencia',
@@ -644,12 +1079,83 @@ class _CompletedTrip extends StatelessWidget {
   );
 }
 
+/// No driver found, or a trip canceled by someone else: say what happened
+/// and offer the next step instead of waiting forever.
+class _OutcomeStage extends StatelessWidget {
+  const _OutcomeStage({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.primary,
+    required this.onPrimary,
+    required this.secondary,
+    required this.onSecondary,
+    this.busy = false,
+  });
+  final IconData icon;
+  final String title, subtitle, primary, secondary;
+  final VoidCallback onPrimary;
+  final VoidCallback? onSecondary;
+  final bool busy;
+
+  @override
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      Icon(icon, size: 40, color: AppColors.brandBlue),
+      const SizedBox(height: AppSpacing.sm),
+      Text(
+        title,
+        textAlign: TextAlign.center,
+        style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w700),
+      ),
+      const SizedBox(height: AppSpacing.xs),
+      Text(
+        subtitle,
+        textAlign: TextAlign.center,
+        style: const TextStyle(color: AppColors.textSecondary),
+      ),
+      const SizedBox(height: AppSpacing.lg),
+      SizedBox(
+        height: 50,
+        child: FilledButton(
+          style: FilledButton.styleFrom(backgroundColor: AppColors.brandGreen),
+          onPressed: busy ? null : onPrimary,
+          child: busy
+              ? const SizedBox.square(
+                  dimension: 20,
+                  child: CircularProgressIndicator(strokeWidth: 2.2),
+                )
+              : Text(primary),
+        ),
+      ),
+      const SizedBox(height: AppSpacing.xs),
+      TextButton(onPressed: onSecondary, child: Text(secondary)),
+    ],
+  );
+}
+
 String _displayName(RideOption option) => switch (option.id) {
   'standard' => 'FLUIR',
   'xl' => 'FLUIR XL',
   _ => 'FLUIR Comfort',
 };
-String _fare(RideState state) => RideFare.formatted(
-  distanceMeters: state.route!.distanceMeters,
-  option: state.option,
-);
+
+/// The simulated autonomous unit; there is no invented fallback id.
+String _vehicleLabel(RideState state) => state.vehicleId ?? 'Vehículo Fluir';
+
+String _driverName(TripDriver? driver) => driver?.displayName ?? 'Tu conductor';
+
+double _distanceMeters(double lat1, double lon1, double lat2, double lon2) {
+  const earthRadius = 6371000.0;
+  double radians(double degrees) => degrees * math.pi / 180;
+  final dLat = radians(lat2 - lat1);
+  final dLon = radians(lon2 - lon1);
+  final a =
+      math.pow(math.sin(dLat / 2), 2) +
+      math.cos(radians(lat1)) *
+          math.cos(radians(lat2)) *
+          math.pow(math.sin(dLon / 2), 2);
+  return 2 * earthRadius * math.asin(math.sqrt(a));
+}

@@ -104,7 +104,10 @@ void main() {
       await tester.pump();
 
       expect(find.text('RD\$354'), findsNWidgets(3));
-      expect(find.text('Pagado'), findsOneWidget);
+      // Phase 4: no payment is processed yet, so the receipt no longer claims
+      // "Pagado" (it was a fixed label); it says the payment is pending.
+      expect(find.text('Pago pendiente'), findsOneWidget);
+      expect(find.text('Pagado'), findsNothing);
       expect(find.text('Mi ubicación actual'), findsOneWidget);
       expect(find.text('Centro Olímpico'), findsOneWidget);
       expect(find.text('6.4 km'), findsOneWidget);

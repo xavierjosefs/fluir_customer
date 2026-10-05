@@ -116,8 +116,10 @@ class RemoteTripRepository implements TripRepository {
     return watch.stream;
   }
 
+  /// Nothing to release: watches end with their subscriptions, and the
+  /// diagnostics notifier may still be read by the debug panel.
   @override
-  void dispose() => _diagnostics.dispose();
+  void dispose() {}
 
   Future<TripSnapshot> _act(
     TripRef ref,

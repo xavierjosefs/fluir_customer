@@ -25,6 +25,7 @@ import '../widgets/home_map_lifecycle_callbacks.dart';
 import '../widgets/home_preparation_overlay.dart';
 import '../widgets/home_services_panel.dart';
 import '../../../ride/presentation/controllers/ride_controller.dart';
+import '../../../ride/presentation/trip_providers.dart';
 import '../../../ride/presentation/widgets/ride_sheet.dart';
 import '../../../ride/domain/models/ride_models.dart';
 
@@ -45,6 +46,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
   Timer? _timeout;
   late final DraggableScrollableController _servicesSheetController;
+
+  /// Coming back to the app re-reads the trip from its source of truth.
+  late final AppLifecycleListener _lifecycle;
   int _mapGeneration = 0;
   HomeServicesSheetMode _sheetMode = HomeServicesSheetMode.medium;
 
@@ -53,11 +57,16 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     super.initState();
     _servicesSheetController = DraggableScrollableController();
     _servicesSheetController.addListener(_updateServiceSelectionPresentation);
+    _lifecycle = AppLifecycleListener(
+      onResume: () =>
+          unawaited(ref.read(rideControllerProvider.notifier).reconcile()),
+    );
     WidgetsBinding.instance.addPostFrameCallback((_) => _prepareHome());
   }
 
   @override
   void dispose() {
+    _lifecycle.dispose();
     _timeout?.cancel();
     _servicesSheetController.removeListener(
       _updateServiceSelectionPresentation,
@@ -77,6 +86,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     final selectedDestination = ref.watch(selectedDestinationProvider);
     final ride = ref.watch(rideControllerProvider);
     final rideController = ref.read(rideControllerProvider.notifier);
+    final syncStatus = ref.watch(
+      tripSyncProvider.select((sync) => sync.status),
+    );
     final readinessController = ref.read(
       homeReadinessControllerProvider.notifier,
     );
@@ -111,9 +123,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           FluirMap(
             key: ValueKey('fluir-map-$_mapGeneration'),
             camera: location.coordinate ?? MockHomeMapData.santoDomingoCamera,
-            pickup: location.coordinate ?? MockHomeMapData.pickupLocation,
+            pickup:
+                ride.trip?.pickup?.coordinate ??
+                ride.origin ??
+                location.coordinate ??
+                MockHomeMapData.pickupLocation,
             vehicles: vehicles,
-            destination: selectedDestination,
+            destination: ride.destination ?? selectedDestination,
             route: ride.route,
             lifecycle: lifecycle,
             surfaceBuilder: mapSurfaceBuilder,
@@ -184,9 +200,14 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               child: RideSheet(
                 state: ride,
                 controller: rideController,
-                onBackToDestination: () {
-                  rideController.cancel();
-                  ref.read(selectedDestinationProvider.notifier).clear();
+                syncStatus: syncStatus,
+                // A live trip is canceled on the backend first; the screen
+                // only goes back once the backend confirms it.
+                onBackToDestination: () async {
+                  final ended = await rideController.cancel();
+                  if (ended && mounted) {
+                    ref.read(selectedDestinationProvider.notifier).clear();
+                  }
                 },
                 onReturnHome: () {
                   rideController.reset();
@@ -220,6 +241,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     controller.markHomeDataReady();
     controller.markServicesReady();
     unawaited(ref.read(homeLocationControllerProvider.notifier).resolve());
+    // Start-up (or a restart mid-trip): show the trip the backend holds.
+    unawaited(ref.read(rideControllerProvider.notifier).reconcile());
 
     final hasFakeMapSurface =
         widget.mapSurfaceBuilder != null ||

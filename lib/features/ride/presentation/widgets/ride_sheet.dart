@@ -7,6 +7,7 @@ import '../../../../app/theme/app_spacing.dart';
 import '../../../payments/presentation/widgets/payment_method_brand_mark.dart';
 import '../../domain/models/ride_models.dart';
 import '../../domain/models/ride_route.dart';
+import '../../domain/repositories/trip_repository.dart';
 import '../../domain/ride_fare.dart';
 import '../controllers/ride_controller.dart';
 import 'ride_option_row.dart';
@@ -21,6 +22,7 @@ class RideSheet extends ConsumerWidget {
     required this.onReturnHome,
     this.now,
     this.options = rideOptions,
+    this.syncStatus,
     super.key,
   });
 
@@ -35,6 +37,9 @@ class RideSheet extends ConsumerWidget {
   /// The fleet on offer. Overridden by tests.
   final List<RideOption> options;
 
+  /// How fresh a live trip is (banners). `null` for the local simulation.
+  final TripSyncStatus? syncStatus;
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     if (state.status.isActiveTrip) {
@@ -43,6 +48,7 @@ class RideSheet extends ConsumerWidget {
         controller: controller,
         onCancelRide: onBackToDestination,
         onReturnHome: onReturnHome,
+        syncStatus: syncStatus,
       );
     }
     return Material(
@@ -131,22 +137,19 @@ class RideSheet extends ConsumerWidget {
               AppSpacing.sm,
             ),
             children: [
-              for (final option in options)
+              for (final option in options.map(_offered))
                 Padding(
                   padding: const EdgeInsets.only(bottom: AppSpacing.xs),
                   child: RideOptionRow(
                     option: option,
-                    price: option.isAvailable
-                        ? RideFare.formatted(
-                            distanceMeters: route.distanceMeters,
-                            option: option,
-                          )
-                        : null,
+                    price: option.isAvailable ? _price(option, route) : null,
                     arrival: _arrivalLabel(clock, route, option),
                     selected: state.option.id == option.id,
                     onTap: () => _selectOption(context, option),
                   ),
                 ),
+              if (state.quotes?.status == RideQuoteStatus.failed)
+                _QuoteFailure(onRetry: controller.retryQuotes),
             ],
           ),
         ),
@@ -154,9 +157,50 @@ class RideSheet extends ConsumerWidget {
           payment: payment,
           onPaymentTap: () => _changePayment(context, ref, payment),
           onConfirm: controller.confirm,
+          submitting: state.isSubmitting,
+          canConfirm: _canConfirm,
+          message: state.quotes?.status == RideQuoteStatus.failed
+              ? null
+              : state.message,
         ),
       ],
     );
+  }
+
+  /// With server fares, a tier the backend does not price cannot be booked.
+  RideOption _offered(RideOption option) {
+    final quotes = state.quotes;
+    if (!option.isAvailable ||
+        quotes == null ||
+        quotes.status != RideQuoteStatus.ready ||
+        quotes.offers(option)) {
+      return option;
+    }
+    return option.asUnavailable();
+  }
+
+  /// Server fare when the backend prices rides; the local estimate otherwise.
+  String? _price(RideOption option, RideRoute route) {
+    final quotes = state.quotes;
+    if (quotes == null) {
+      return RideFare.formatted(
+        distanceMeters: route.distanceMeters,
+        option: option,
+      );
+    }
+    final quote = quotes.forOption(option);
+    return switch (quotes.status) {
+      RideQuoteStatus.loading => '…',
+      RideQuoteStatus.failed => '—',
+      RideQuoteStatus.ready =>
+        quote == null ? null : RideFare.format(quote.price.round()),
+    };
+  }
+
+  bool get _canConfirm {
+    final quotes = state.quotes;
+    return !state.isSubmitting &&
+        (quotes == null || quotes.offers(state.option));
   }
 
   void _selectOption(BuildContext context, RideOption option) {
@@ -231,11 +275,21 @@ class _Footer extends StatelessWidget {
     required this.payment,
     required this.onPaymentTap,
     required this.onConfirm,
+    this.submitting = false,
+    this.canConfirm = true,
+    this.message,
   });
 
   final RidePaymentOption payment;
   final VoidCallback onPaymentTap;
   final VoidCallback onConfirm;
+
+  /// The request is on its way: one tap creates one trip.
+  final bool submitting;
+  final bool canConfirm;
+
+  /// Why the last request failed, in Spanish.
+  final String? message;
 
   @override
   Widget build(BuildContext context) {
@@ -256,20 +310,48 @@ class _Footer extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             _PaymentRow(payment: payment, onTap: onPaymentTap),
+            if (message != null) ...[
+              const SizedBox(height: AppSpacing.xs),
+              Semantics(
+                liveRegion: true,
+                child: Text(
+                  message!,
+                  key: const ValueKey('ride-request-message'),
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: colors.error),
+                ),
+              ),
+            ],
             const SizedBox(height: AppSpacing.sm),
             SizedBox(
               width: double.infinity,
               height: 52,
               child: FilledButton(
+                key: const ValueKey('ride-confirm'),
                 style: FilledButton.styleFrom(
                   backgroundColor: AppColors.brandGreen,
                   foregroundColor: AppColors.navy,
                 ),
-                onPressed: onConfirm,
-                child: const Text(
-                  'Confirmar viaje',
-                  style: TextStyle(fontWeight: FontWeight.w700),
-                ),
+                onPressed: submitting || !canConfirm ? null : onConfirm,
+                child: submitting
+                    ? const Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          SizedBox.square(
+                            dimension: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2.2),
+                          ),
+                          SizedBox(width: AppSpacing.sm),
+                          Text(
+                            'Solicitando viaje…',
+                            style: TextStyle(fontWeight: FontWeight.w700),
+                          ),
+                        ],
+                      )
+                    : const Text(
+                        'Confirmar viaje',
+                        style: TextStyle(fontWeight: FontWeight.w700),
+                      ),
               ),
             ),
             const SizedBox(height: AppSpacing.xs),
@@ -284,6 +366,31 @@ class _Footer extends StatelessWidget {
       ),
     );
   }
+}
+
+/// The backend fares could not be loaded: say so and offer to try again.
+class _QuoteFailure extends StatelessWidget {
+  const _QuoteFailure({required this.onRetry});
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.symmetric(
+      horizontal: AppSpacing.sm,
+      vertical: AppSpacing.xs,
+    ),
+    child: Row(
+      children: [
+        Expanded(
+          child: Text(
+            'No pudimos obtener las tarifas.',
+            style: TextStyle(color: Theme.of(context).colorScheme.error),
+          ),
+        ),
+        TextButton(onPressed: onRetry, child: const Text('Reintentar')),
+      ],
+    ),
+  );
 }
 
 /// The usual affordance that this surface is a sheet sitting over the map.

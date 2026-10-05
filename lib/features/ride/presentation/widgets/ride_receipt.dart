@@ -7,6 +7,7 @@ import '../../../../app/theme/app_typography.dart';
 import '../../../home/data/mock/mock_home_map_data.dart';
 import '../../../payments/presentation/widgets/payment_method_brand_mark.dart';
 import '../../domain/models/ride_models.dart';
+import '../../domain/models/trip.dart';
 import '../../domain/ride_fare.dart';
 import '../controllers/ride_controller.dart';
 
@@ -46,13 +47,19 @@ class RideReceipt extends StatelessWidget {
                   onBack: onReturnHome,
                 ),
                 const SizedBox(height: AppSpacing.xl),
-                _TotalSummary(total: total),
+                _TotalSummary(
+                  total: total,
+                  paid: state.trip?.paymentCompleted ?? false,
+                ),
                 const SizedBox(height: AppSpacing.xl),
                 _RouteCard(state: state),
                 const SizedBox(height: AppSpacing.lg),
-                const _SectionTitle('Vehículo'),
+                _SectionTitle(state.hasHumanDriver ? 'Conductor' : 'Vehículo'),
                 const SizedBox(height: AppSpacing.sm),
-                _VehicleCard(state: state),
+                if (state.hasHumanDriver)
+                  _DriverCard(driver: state.trip?.driver)
+                else
+                  _VehicleCard(state: state),
                 const SizedBox(height: AppSpacing.lg),
                 const _SectionTitle('Método de pago'),
                 const SizedBox(height: AppSpacing.sm),
@@ -149,8 +156,12 @@ class _ReceiptHeader extends StatelessWidget {
 }
 
 class _TotalSummary extends StatelessWidget {
-  const _TotalSummary({required this.total});
+  const _TotalSummary({required this.total, required this.paid});
   final String total;
+
+  /// Only a payment the backend confirms is shown as paid. Payments are not
+  /// processed yet, so rides end as "Pago pendiente".
+  final bool paid;
   @override
   Widget build(BuildContext context) => Center(
     child: Column(
@@ -169,26 +180,44 @@ class _TotalSummary extends StatelessWidget {
         ),
         const SizedBox(height: AppSpacing.sm),
         Semantics(
-          label: 'Estado de pago: Pagado',
+          label: 'Estado de pago: ${paid ? 'Pagado' : 'Pago pendiente'}',
           child: Container(
             padding: const EdgeInsets.symmetric(
               horizontal: AppSpacing.sm,
               vertical: AppSpacing.xxs,
             ),
             decoration: BoxDecoration(
-              color: AppColors.brandGreen.withValues(alpha: .10),
+              color: (paid ? AppColors.brandGreen : AppColors.textSecondary)
+                  .withValues(alpha: .10),
               border: Border.all(
-                color: AppColors.brandGreen.withValues(alpha: .5),
+                color: (paid ? AppColors.brandGreen : AppColors.textSecondary)
+                    .withValues(alpha: .5),
               ),
               borderRadius: BorderRadius.circular(99),
             ),
-            child: const Row(
+            child: Row(
               mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(Icons.check, color: AppColors.brandGreen, size: 17),
-                SizedBox(width: AppSpacing.xxs),
-                Text('Pagado', style: TextStyle(color: Color(0xFF078D5A))),
-              ],
+              children: paid
+                  ? const [
+                      Icon(Icons.check, color: AppColors.brandGreen, size: 17),
+                      SizedBox(width: AppSpacing.xxs),
+                      Text(
+                        'Pagado',
+                        style: TextStyle(color: Color(0xFF078D5A)),
+                      ),
+                    ]
+                  : const [
+                      Icon(
+                        Icons.schedule,
+                        color: AppColors.textSecondary,
+                        size: 17,
+                      ),
+                      SizedBox(width: AppSpacing.xxs),
+                      Text(
+                        'Pago pendiente',
+                        style: TextStyle(color: AppColors.textSecondary),
+                      ),
+                    ],
             ),
           ),
         ),
@@ -222,8 +251,9 @@ class _RouteCard extends StatelessWidget {
                   const SizedBox(height: AppSpacing.lg),
                   _RoutePlace(
                     label: 'Destino',
-                    name: state.destination!.name,
-                    semanticsLabel: 'Destino: ${state.destination!.name}',
+                    name: state.destination?.name ?? 'Destino',
+                    semanticsLabel:
+                        'Destino: ${state.destination?.name ?? 'sin nombre'}',
                   ),
                 ],
               ),
@@ -369,8 +399,7 @@ class _VehicleCard extends StatelessWidget {
           child: Image.asset(
             vehicleAssetFor(state.option.id),
             fit: BoxFit.contain,
-            semanticLabel:
-                'Vehículo autónomo ${state.vehicleId ?? 'FLUIR-001'}',
+            semanticLabel: 'Vehículo autónomo ${state.vehicleId ?? ''}'.trim(),
           ),
         ),
         const SizedBox(width: AppSpacing.sm),
@@ -379,7 +408,7 @@ class _VehicleCard extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                state.vehicleId ?? 'FLUIR-001',
+                state.vehicleId ?? 'Vehículo Fluir',
                 style: AppTypography.textTheme.titleMedium,
               ),
               const Text('Vehículo autónomo'),
@@ -393,6 +422,49 @@ class _VehicleCard extends StatelessWidget {
       ],
     ),
   );
+}
+
+/// The Fluir Workers driver of the trip, as the backend described them.
+class _DriverCard extends StatelessWidget {
+  const _DriverCard({required this.driver});
+  final TripDriver? driver;
+  @override
+  Widget build(BuildContext context) {
+    final name = driver?.displayName ?? 'Tu conductor';
+    return Semantics(
+      label: 'Conductor $name',
+      child: _ReceiptCard(
+        child: Row(
+          children: [
+            CircleAvatar(
+              radius: 26,
+              backgroundColor: AppColors.brandBlue.withValues(alpha: .12),
+              child: const Icon(
+                Icons.person_outline,
+                color: AppColors.brandBlue,
+              ),
+            ),
+            const SizedBox(width: AppSpacing.md),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(name, style: AppTypography.textTheme.titleMedium),
+                  Text(driver?.carModel ?? 'Vehículo sin especificar'),
+                  Text(
+                    driver?.licensePlate == null
+                        ? 'Placa no disponible'
+                        : 'Placa ${driver!.licensePlate}',
+                    style: const TextStyle(color: AppColors.textSecondary),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 class _PaymentCard extends StatelessWidget {
@@ -504,20 +576,28 @@ class _ReceiptCard extends StatelessWidget {
   );
 }
 
-String formatRideFare(RideState state) => RideFare.formatted(
-  distanceMeters: state.route!.distanceMeters,
-  option: state.option,
-);
+/// The fare the backend stored with the trip; the local estimate only for
+/// the simulation, which has no server price.
+String formatRideFare(RideState state) {
+  final price = state.trip?.price;
+  if (price != null) return RideFare.format(price.round());
+  final distance = state.route?.distanceMeters;
+  if (distance == null) return '—';
+  return RideFare.formatted(distanceMeters: distance, option: state.option);
+}
 
 String formatRideDistance(RideState state) {
-  final meters = state.route!.distanceMeters;
+  final meters = state.distanceMeters;
+  if (meters == null) return '—';
   return meters < 1000
       ? '${meters.round()} m'
       : '${(meters / 1000).toStringAsFixed(1)} km';
 }
 
-String formatRideDuration(RideState state) =>
-    '${(state.route!.durationSeconds / 60).ceil()} min';
+String formatRideDuration(RideState state) {
+  final seconds = state.durationSeconds;
+  return seconds == null ? '—' : '${(seconds / 60).ceil()} min';
+}
 
 String receiptServiceName(RideOption option) => option.displayName;
 
@@ -528,8 +608,13 @@ String receiptNumber(RideState state) {
   final completedAt = state.completedAt!;
   final date =
       '${completedAt.year}${completedAt.month.toString().padLeft(2, '0')}${completedAt.day.toString().padLeft(2, '0')}';
-  final vehicleSuffix = (state.vehicleId ?? 'FLUIR-001').split('-').last;
-  return 'FLR-$date-$vehicleSuffix';
+  // Backend trips are identified by their order id; the simulation by its
+  // vehicle.
+  final trip = state.trip;
+  final suffix = state.hasHumanDriver && trip != null
+      ? trip.ref.orderId.toString().padLeft(3, '0')
+      : (state.vehicleId ?? '000').split('-').last;
+  return 'FLR-$date-$suffix';
 }
 
 String formatReceiptDate(DateTime date) {

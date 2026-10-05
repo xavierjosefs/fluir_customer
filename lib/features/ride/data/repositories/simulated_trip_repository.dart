@@ -126,7 +126,6 @@ class SimulatedTripRepository implements TripRepository {
   void dispose() {
     _timer?.cancel();
     _changes.close();
-    _diagnostics.dispose();
   }
 
   TripSnapshot? get _activeTrip {

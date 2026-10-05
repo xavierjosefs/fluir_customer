@@ -90,6 +90,21 @@ class RideOption {
   final int? tariffId;
 
   bool get isAvailable => availability == RideOptionAvailability.available;
+
+  /// The same tier, shown as not bookable (e.g. the backend has no tariff
+  /// for it).
+  RideOption asUnavailable({String badge = 'No disponible'}) => RideOption(
+    id: id,
+    displayName: displayName,
+    description: description,
+    passengerCapacity: passengerCapacity,
+    pickupMinutes: pickupMinutes,
+    multiplier: multiplier,
+    asset: asset,
+    availability: RideOptionAvailability.comingSoon,
+    badge: badge,
+    tariffId: tariffId,
+  );
 }
 
 /// The Fluir fleet, in the order the customer sees it.
