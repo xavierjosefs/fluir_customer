@@ -13,6 +13,12 @@ enum RideStatus {
   readyToBoard,
   inProgress,
   completed,
+
+  /// The backend found no available driver; the search can be restarted.
+  noDriverFound,
+
+  /// The backend canceled the trip (customer, driver or system).
+  cancelled,
   error,
 }
 
@@ -31,7 +37,16 @@ extension RideStatusPresentation on RideStatus {
       this == RideStatus.vehicleArriving ||
       this == RideStatus.readyToBoard ||
       this == RideStatus.inProgress ||
-      this == RideStatus.completed;
+      this == RideStatus.completed ||
+      this == RideStatus.noDriverFound ||
+      this == RideStatus.cancelled;
+
+  /// A driver is assigned and has not finished the trip yet.
+  bool get hasAssignedVehicle =>
+      this == RideStatus.vehicleAssigned ||
+      this == RideStatus.vehicleArriving ||
+      this == RideStatus.readyToBoard ||
+      this == RideStatus.inProgress;
 }
 
 /// Whether a vehicle tier can actually be requested right now.
@@ -50,6 +65,7 @@ class RideOption {
     required this.asset,
     this.availability = RideOptionAvailability.available,
     this.badge,
+    this.tariffId,
   });
 
   final String id;
@@ -68,6 +84,11 @@ class RideOption {
   /// Short qualifier shown next to the name ("Más rápido", "Próximamente").
   final String? badge;
 
+  /// Fluir backend `TaxiTariff` this tier is requested as (REGULAR = 2,
+  /// BUSINESS = 3, DRON = 4). `null` when the backend has no matching tariff:
+  /// the tier can then only be offered by the local simulation.
+  final int? tariffId;
+
   bool get isAvailable => availability == RideOptionAvailability.available;
 }
 
@@ -82,6 +103,7 @@ const rideOptions = [
     multiplier: 1,
     asset: 'assets/images/vehicles/fluir_standard.png',
     badge: 'Más rápido',
+    tariffId: 2,
   ),
   RideOption(
     id: 'comfort',
@@ -100,6 +122,7 @@ const rideOptions = [
     pickupMinutes: 7,
     multiplier: 1.68,
     asset: 'assets/images/vehicles/fluir_xl.png',
+    tariffId: 3,
   ),
   RideOption(
     id: 'air',
@@ -109,6 +132,7 @@ const rideOptions = [
     pickupMinutes: 12,
     multiplier: 4.5,
     asset: 'assets/images/vehicles/fluir_air.png',
+    tariffId: 4,
   ),
 ];
 
@@ -121,6 +145,7 @@ const defaultRideOption = RideOption(
   multiplier: 1,
   asset: 'assets/images/vehicles/fluir_standard.png',
   badge: 'Más rápido',
+  tariffId: 2,
 );
 
 /// Resolves the vehicle artwork for surfaces that only know an id or the
