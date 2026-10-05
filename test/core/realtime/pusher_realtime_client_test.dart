@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:fluir_customer/core/network/api_exception.dart';
 import 'package:fluir_customer/core/realtime/pusher_realtime_client.dart';
 import 'package:fluir_customer/core/realtime/realtime_contract.dart';
