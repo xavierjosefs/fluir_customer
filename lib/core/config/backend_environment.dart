@@ -149,6 +149,50 @@ class BackendConfiguration {
   }
 }
 
+/// Seeded demo customer of fluir-demo-backend (`DEMO_MODE`). The verification
+/// code is the backend's `DEMO_OTP_CODE`, supplied through a git-ignored
+/// dart-define file; it is never logged or shown.
+@immutable
+class DemoCustomerCredentials {
+  const DemoCustomerCredentials({
+    required this.phone,
+    required this.country,
+    required this.verificationCode,
+  });
+
+  final String phone;
+  final String country;
+  final String verificationCode;
+
+  /// Only debug builds of the demo talking to a backend get a demo sign-in.
+  static DemoCustomerCredentials? resolve({
+    required BackendConfiguration configuration,
+    required String phone,
+    required String country,
+    required String verificationCode,
+    required bool isReleaseBuild,
+  }) {
+    final digits = phone.replaceAll(RegExp(r'\D'), '');
+    final code = verificationCode.trim();
+    if (isReleaseBuild ||
+        !configuration.demoMode ||
+        configuration.tripBackendMode != TripBackendMode.remote ||
+        digits.length < 7 ||
+        code.isEmpty) {
+      return null;
+    }
+    final countryCode = country.trim().toUpperCase();
+    return DemoCustomerCredentials(
+      phone: digits,
+      country: countryCode.isEmpty ? 'DO' : countryCode,
+      verificationCode: code,
+    );
+  }
+
+  @override
+  String toString() => 'DemoCustomerCredentials(<redacted>)';
+}
+
 /// Backend configuration supplied through `--dart-define-from-file=.env`
 /// (keys listed in `.env.example`). Without `FLUIR_API_BASE_URL` the app keeps
 /// the simulated trip flow. Cleartext `http://` / `ws://` is accepted only in
@@ -159,6 +203,13 @@ abstract final class BackendEnvironment {
   static const _wsAppKey = String.fromEnvironment('FLUIR_WS_APP_KEY');
   static const _demoMode = bool.fromEnvironment('FLUIR_DEMO_MODE');
   static const _demoGpsEnabled = bool.fromEnvironment('FLUIR_DEMO_GPS_ENABLED');
+  static const _demoCustomerPhone = String.fromEnvironment(
+    'FLUIR_DEMO_CUSTOMER_PHONE',
+  );
+  static const _demoCustomerCountry = String.fromEnvironment(
+    'FLUIR_DEMO_CUSTOMER_COUNTRY',
+  );
+  static const _demoOtp = String.fromEnvironment('FLUIR_DEMO_OTP');
 
   static final BackendConfiguration current = BackendConfiguration.resolve(
     apiBaseUrl: _apiBaseUrl,
@@ -168,6 +219,16 @@ abstract final class BackendEnvironment {
     demoGpsEnabled: _demoGpsEnabled,
     allowCleartext: !kReleaseMode,
   );
+
+  /// `null` unless this is a debug demo build with demo credentials.
+  static final DemoCustomerCredentials? demoCustomer =
+      DemoCustomerCredentials.resolve(
+        configuration: current,
+        phone: _demoCustomerPhone,
+        country: _demoCustomerCountry,
+        verificationCode: _demoOtp,
+        isReleaseBuild: kReleaseMode,
+      );
 
   /// PAYMENT_MODE keeps its existing key and parser until the payment phase.
   static PaymentGatewayMode get paymentMode => PaymentGatewayEnvironment.mode;

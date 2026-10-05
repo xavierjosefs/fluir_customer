@@ -48,5 +48,7 @@ app.*.map.json
 .widget_preview/
 
 .env
+.env.*
+!.env.example
 tmp/
 android/.kotlin/

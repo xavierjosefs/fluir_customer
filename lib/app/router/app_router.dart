@@ -1,7 +1,10 @@
+import 'package:flutter/widgets.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../features/account/presentation/screens/account_placeholder_screen.dart';
 import '../../features/activity/presentation/screens/activity_screen.dart';
+import '../../features/authentication/presentation/controllers/customer_session_controller.dart';
 import '../../features/authentication/presentation/screens/auth_success_screen.dart';
 import '../../features/authentication/presentation/screens/code_sent_screen.dart';
 import '../../features/authentication/presentation/screens/otp_screen.dart';
@@ -34,7 +37,7 @@ final GoRouter appRouter = GoRouter(
   routes: [
     GoRoute(
       path: AppRoutes.splash,
-      builder: (context, state) => const SplashScreen(),
+      builder: (context, state) => const _SplashGate(),
     ),
     GoRoute(
       path: AppRoutes.onboarding,
@@ -115,3 +118,18 @@ final GoRouter appRouter = GoRouter(
     ),
   ],
 );
+
+/// The splash hands over to onboarding, or straight to Inicio when a backend
+/// session was restored (the active trip is then reconciled from Home).
+class _SplashGate extends ConsumerWidget {
+  const _SplashGate();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) => SplashScreen(
+    onCompleted: () => context.go(
+      ref.read(customerSessionProvider).isSignedIn
+          ? AppRoutes.home
+          : AppRoutes.onboarding,
+    ),
+  );
+}

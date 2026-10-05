@@ -7,6 +7,8 @@ import 'app/system_ui.dart';
 import 'app/theme/theme_controller.dart';
 import 'app/theme/theme_preferences_repository.dart';
 import 'core/config/mapbox_configuration.dart';
+import 'core/network/backend_providers.dart';
+import 'core/network/session_store.dart';
 import 'features/payments/data/repositories/card_vault_store.dart';
 import 'features/payments/presentation/payments_providers.dart';
 
@@ -26,6 +28,9 @@ Future<void> main() async {
         ),
         cardVaultStoreProvider.overrideWithValue(
           SharedPreferencesCardVaultStore(preferences),
+        ),
+        sessionStoreProvider.overrideWithValue(
+          SharedPreferencesSessionStore(preferences),
         ),
       ],
       child: const FluirApp(),

@@ -54,6 +54,8 @@ class ApiException implements Exception {
     ApiFailure.rejected => switch (code) {
       'active_order_exists' => 'Ya tienes un viaje en curso.',
       'invalid_transition' => 'Este viaje ya cambió de estado.',
+      'invalid_code' => 'El código de verificación no es válido.',
+      'unknown_demo_user' => 'Este número no es un cliente demo.',
       _ => 'No pudimos completar la solicitud.',
     },
     ApiFailure.server =>
