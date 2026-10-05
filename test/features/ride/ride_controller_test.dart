@@ -520,6 +520,39 @@ void main() {
       },
     );
 
+    test('signing in again keeps an unchanged trip live', () async {
+      final (:container, :trips) = _setUp();
+      final controller = container.read(rideControllerProvider.notifier);
+      await controller.plan(_destination);
+      await controller.confirm();
+      trips.push(
+        snapshot(BackendTripStatus.driverFound, version: 2, driver: carlos),
+      );
+      await _settle();
+      final session =
+          container.read(customerSessionProvider.notifier) as _Session;
+
+      session.emit(
+        const CustomerSession(status: CustomerSessionStatus.expired),
+      );
+      await _settle();
+      // Nothing changed on the backend while the customer signed in again.
+      session.emit(_signedIn);
+      await _settle();
+      await _settle();
+
+      expect(trips.fetched, contains(tripRef));
+      expect(trips.isWatching(tripRef), isTrue);
+      trips.push(
+        snapshot(BackendTripStatus.arrives, version: 3, driver: carlos),
+      );
+      await _settle();
+      expect(
+        container.read(rideControllerProvider).status,
+        RideStatus.vehicleArriving,
+      );
+    });
+
     test('without a session nothing is fetched', () async {
       final (:container, :trips) = _setUp(session: const CustomerSession());
 

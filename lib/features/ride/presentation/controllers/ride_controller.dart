@@ -571,6 +571,9 @@ class RideController extends Notifier<RideState> {
     if (current != null && current.ref == snapshot.ref) {
       if (!snapshot.isNewerThan(current)) {
         if (state.isSubmitting) state = state.copyWith(isSubmitting: false);
+        // Nothing new, but a live trip must stay watched: signing in again
+        // restarts the watch and usually finds the trip unchanged.
+        if (!current.isTerminal) _watchTrip(current.ref);
         return;
       }
     }
