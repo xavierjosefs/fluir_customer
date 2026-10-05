@@ -46,8 +46,9 @@ void main() {
     addTearDown(subscription.cancel);
 
     expect(trip.status, BackendTripStatus.searching);
-    await Future<void>.delayed(step * 6);
+    await _until(() => statuses.length >= 3);
     // It waits at the vehicle until the customer boards.
+    await Future<void>.delayed(step * 4);
     expect(statuses, [
       BackendTripStatus.driverFound,
       BackendTripStatus.arrives,
@@ -59,7 +60,7 @@ void main() {
     );
 
     await repository.confirmBoarding(trip.ref);
-    await Future<void>.delayed(step * 3);
+    await _until(() => statuses.length >= 5);
     expect(statuses.sublist(3), [
       BackendTripStatus.processed,
       BackendTripStatus.completed,
@@ -81,4 +82,19 @@ void main() {
     final second = await repository.createTrip(_request);
     expect(second.ref, isNot(first.ref));
   });
+}
+
+/// Real timers run late on a loaded machine: wait for the condition instead
+/// of a fixed delay.
+Future<void> _until(
+  bool Function() condition, {
+  Duration timeout = const Duration(seconds: 5),
+}) async {
+  final deadline = DateTime.now().add(timeout);
+  while (!condition()) {
+    if (DateTime.now().isAfter(deadline)) {
+      fail('condition not met within $timeout');
+    }
+    await Future<void>.delayed(const Duration(milliseconds: 5));
+  }
 }
