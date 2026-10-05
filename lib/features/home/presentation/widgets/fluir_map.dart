@@ -106,6 +106,17 @@ class _FluirMapState extends State<FluirMap>
   DateTime? _lastFollowCheck;
   int _handledRecenters = 0;
 
+  /// The initial camera, built once. MapWidget compares viewports by
+  /// identity and moves the camera to a new one on every rebuild, which sent
+  /// the camera back to Home whenever a trip update rebuilt the map. Later
+  /// moves go through easeTo instead.
+  late final CameraViewportState _initialViewport = CameraViewportState(
+    center: _point(widget.camera),
+    zoom: 14.8,
+    pitch: 0,
+    bearing: 0,
+  );
+
   @override
   void initState() {
     super.initState();
@@ -233,12 +244,7 @@ class _FluirMapState extends State<FluirMap>
       children: [
         MapWidget(
           styleUri: styleUri,
-          viewport: CameraViewportState(
-            center: _point(widget.camera),
-            zoom: 14.8,
-            pitch: 0,
-            bearing: 0,
-          ),
+          viewport: _initialViewport,
           onMapCreated: _onMapCreated,
           // A customer who moves the map takes over the camera.
           onScrollListener: (_) => widget.mapController?.stopFollowing(),
