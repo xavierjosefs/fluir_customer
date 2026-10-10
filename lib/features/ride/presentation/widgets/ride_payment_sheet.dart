@@ -64,8 +64,7 @@ class RidePaymentSheet extends ConsumerWidget {
                       message: 'Cargando tus tarjetas…',
                       showProgress: true,
                     ),
-                  if (wallet.status == PaymentMethodsStatus.error ||
-                      wallet.status == PaymentMethodsStatus.listingUnavailable)
+                  if (wallet.status == PaymentMethodsStatus.error)
                     _WalletHint(
                       key: const ValueKey('ride-payment-wallet-error'),
                       message:

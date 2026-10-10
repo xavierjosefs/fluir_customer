@@ -1,9 +1,9 @@
 import 'package:fluir_customer/features/payments/data/repositories/card_vault_store.dart';
 import 'package:fluir_customer/features/payments/data/repositories/local_card_vault.dart';
-import 'package:fluir_customer/features/payments/domain/payment_gateway_exception.dart';
+import 'package:fluir_customer/features/payments/domain/payment_vault_exception.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'payments_test_gateway.dart';
+import 'payments_test_cards.dart';
 
 /// The simulated vault stands in for the gateway while there is no
 /// authenticated Fluir backend. It must behave like one — and, above all, never
@@ -18,7 +18,7 @@ void main() {
   });
 
   test('a saved card keeps only what a wallet may keep', () async {
-    final saved = await vault.saveCard(PaymentsTestGateway.card());
+    final saved = await vault.saveCard(PaymentsTestCards.card());
 
     expect(saved.brand, 'VISA');
     expect(saved.last4, '1111');
@@ -40,18 +40,18 @@ void main() {
       'label',
     });
     final serialized = stored.toString();
-    expect(serialized, isNot(contains(PaymentsTestGateway.testPan)));
+    expect(serialized, isNot(contains(PaymentsTestCards.testPan)));
     // The security code and the full cardholder line are never kept.
     expect(stored['label'], isNot(contains('Pérez')));
     expect(serialized, isNot(contains('Pérez')));
   });
 
   test('the first card becomes the default on its own', () async {
-    final first = await vault.saveCard(PaymentsTestGateway.card());
+    final first = await vault.saveCard(PaymentsTestCards.card());
     expect(first.isDefault, isTrue);
 
     final second = await vault.saveCard(
-      PaymentsTestGateway.card(number: '5555555555554444', holderName: 'Luis'),
+      PaymentsTestCards.card(number: '5555555555554444', holderName: 'Luis'),
     );
     expect(second.isDefault, isFalse);
 
@@ -60,9 +60,9 @@ void main() {
   });
 
   test('saving with makeDefault moves the default exactly once', () async {
-    await vault.saveCard(PaymentsTestGateway.card());
+    await vault.saveCard(PaymentsTestCards.card());
     final second = await vault.saveCard(
-      PaymentsTestGateway.card(number: '5555555555554444'),
+      PaymentsTestCards.card(number: '5555555555554444'),
       makeDefault: true,
     );
 
@@ -71,13 +71,13 @@ void main() {
   });
 
   test('the same card is not vaulted twice', () async {
-    await vault.saveCard(PaymentsTestGateway.card());
+    await vault.saveCard(PaymentsTestCards.card());
 
     expect(
-      () => vault.saveCard(PaymentsTestGateway.card()),
+      () => vault.saveCard(PaymentsTestCards.card()),
       throwsA(
-        isA<PaymentGatewayException>()
-            .having((e) => e.failure, 'failure', PaymentGatewayFailure.conflict)
+        isA<PaymentVaultException>()
+            .having((e) => e.failure, 'failure', PaymentVaultFailure.duplicate)
             .having((e) => e.message, 'message', contains('Ya tienes')),
       ),
     );
@@ -86,10 +86,10 @@ void main() {
   test('a card ending in the decline marker is refused', () async {
     expect(
       () => vault.saveCard(
-        PaymentsTestGateway.card(number: PaymentsTestGateway.declinedPan),
+        PaymentsTestCards.card(number: PaymentsTestCards.declinedPan),
       ),
       throwsA(
-        isA<PaymentGatewayException>().having(
+        isA<PaymentVaultException>().having(
           (e) => e.message,
           'message',
           contains('no autorizó'),
@@ -100,8 +100,8 @@ void main() {
   });
 
   test('revoking is logical and hands the default to another card', () async {
-    final first = await vault.saveCard(PaymentsTestGateway.card());
-    await vault.saveCard(PaymentsTestGateway.card(number: '5555555555554444'));
+    final first = await vault.saveCard(PaymentsTestCards.card());
+    await vault.saveCard(PaymentsTestCards.card(number: '5555555555554444'));
 
     await vault.revokeMethod(first.id);
 
@@ -117,17 +117,17 @@ void main() {
     expect(
       () => vault.setDefaultMethod('pm_missing'),
       throwsA(
-        isA<PaymentGatewayException>().having(
+        isA<PaymentVaultException>().having(
           (e) => e.failure,
           'failure',
-          PaymentGatewayFailure.notFound,
+          PaymentVaultFailure.notFound,
         ),
       ),
     );
   });
 
   test('a wallet that cannot be read is empty, not broken', () async {
-    final saved = await vault.saveCard(PaymentsTestGateway.card());
+    final saved = await vault.saveCard(PaymentsTestCards.card());
     final restored = LocalCardVault(
       store: InMemoryCardVaultStore(await store.read()),
       latency: Duration.zero,

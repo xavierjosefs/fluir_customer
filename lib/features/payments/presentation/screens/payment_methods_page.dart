@@ -47,16 +47,6 @@ class PaymentMethodsPage extends ConsumerWidget {
             secondaryLabel: 'Volver',
             onSecondary: () => _leave(context),
           ),
-          PaymentMethodsStatus.listingUnavailable => PaymentsStatusView(
-            key: const ValueKey('payment-methods-listing-unavailable'),
-            icon: Icons.lock_outline,
-            iconColor: AppColors.warning,
-            title: 'No podemos mostrar tus tarjetas',
-            description:
-                state.errorMessage ??
-                'El listado de tarjetas necesita el backend autenticado de '
-                    'Fluir.',
-          ),
           PaymentMethodsStatus.ready =>
             state.methods.isEmpty
                 ? PaymentsStatusView(
@@ -70,16 +60,10 @@ class PaymentMethodsPage extends ConsumerWidget {
                     primaryLabel: 'Agregar método de pago',
                     onPrimary: () => _openAddFlow(context, ref),
                   )
-                : _MethodsList(
-                    state: state,
-                    controller: controller,
-                    walletMode: ref.watch(paymentWalletModeProvider),
-                  ),
+                : _MethodsList(state: state, controller: controller),
         },
       ),
-      bottomNavigationBar:
-          state.canManageMethods ||
-              state.status == PaymentMethodsStatus.listingUnavailable
+      bottomNavigationBar: state.canManageMethods
           ? SafeArea(
               minimum: const EdgeInsets.fromLTRB(
                 AppSpacing.lg,
@@ -115,15 +99,10 @@ class PaymentMethodsPage extends ConsumerWidget {
 }
 
 class _MethodsList extends StatelessWidget {
-  const _MethodsList({
-    required this.state,
-    required this.controller,
-    required this.walletMode,
-  });
+  const _MethodsList({required this.state, required this.controller});
 
   final PaymentMethodsState state;
   final PaymentMethodsController controller;
-  final PaymentWalletMode walletMode;
 
   @override
   Widget build(BuildContext context) => RefreshIndicator(
@@ -165,12 +144,9 @@ class _MethodsList extends StatelessWidget {
         ],
         const SizedBox(height: AppSpacing.xs),
         Text(
-          walletMode == PaymentWalletMode.gateway
-              ? 'Los datos de tu tarjeta se tokenizan en el entorno seguro '
-                    'de AZUL. Fluir solo conserva la marca y los últimos '
-                    'cuatro dígitos.'
-              : 'Modo demostración: estas tarjetas se tokenizan en el '
-                    'dispositivo. No se envían a AZUL ni generan cargos.',
+          'Modo demostración: estas tarjetas se tokenizan en este '
+          'dispositivo. Fluir solo conserva la marca y los últimos cuatro '
+          'dígitos, y no se genera ningún cargo.',
           style: Theme.of(context).textTheme.bodySmall
               ?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant),
         ),

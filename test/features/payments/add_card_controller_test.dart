@@ -6,14 +6,14 @@ import 'package:fluir_customer/features/payments/presentation/payments_providers
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'payments_test_gateway.dart';
+import 'payments_test_cards.dart';
 
 void main() {
   ProviderContainer containerWith(InMemoryCardVaultStore store) {
     final container = ProviderContainer(
       overrides: [
         cardVaultStoreProvider.overrideWithValue(store),
-        simulatedCardVaultProvider.overrideWith(
+        cardVaultProvider.overrideWith(
           (ref) => LocalCardVault(store: store, latency: Duration.zero),
         ),
       ],
@@ -23,7 +23,7 @@ void main() {
   }
 
   void fill(AddCardController controller, {CardEntryDraft? draft}) {
-    final source = draft ?? PaymentsTestGateway.draft();
+    final source = draft ?? PaymentsTestCards.draft();
     controller
       ..updateNumber(source.number)
       ..updateExpiry(source.expiry)
@@ -53,7 +53,7 @@ void main() {
       isNotNull,
     );
 
-    controller.updateNumber(PaymentsTestGateway.testPan);
+    controller.updateNumber(PaymentsTestCards.testPan);
     final state = container.read(addCardControllerProvider);
     expect(state.errors[CardField.number], isNull);
     expect(state.errors[CardField.holder], isNotNull);
@@ -96,7 +96,7 @@ void main() {
 
     fill(
       controller,
-      draft: PaymentsTestGateway.draft(number: PaymentsTestGateway.declinedPan),
+      draft: PaymentsTestCards.draft(number: PaymentsTestCards.declinedPan),
     );
     await controller.submit();
 
@@ -112,7 +112,7 @@ void main() {
     final container = ProviderContainer(
       overrides: [
         cardVaultStoreProvider.overrideWithValue(store),
-        simulatedCardVaultProvider.overrideWith(
+        cardVaultProvider.overrideWith(
           (ref) => LocalCardVault(
             store: store,
             latency: const Duration(milliseconds: 40),

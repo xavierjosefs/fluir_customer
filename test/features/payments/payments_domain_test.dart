@@ -5,13 +5,13 @@ import 'package:fluir_customer/features/payments/domain/models/card_entry.dart';
 import 'package:fluir_customer/features/payments/domain/models/payment_method.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'payments_test_gateway.dart';
+import 'payments_test_cards.dart';
 
 void main() {
   group('PaymentMethod', () {
     test('parses only the fields the app is allowed to keep', () {
       final method = PaymentMethod.tryParse({
-        ...PaymentsTestGateway.paymentMethodBody(),
+        ...PaymentsTestCards.methodJson(),
         'dataVaultToken': 'must-not-be-used',
         'pan': '4242424242424242',
       });
@@ -35,7 +35,7 @@ void main() {
 
     test('normalizes brand names and flags expired cards', () {
       final mastercard = PaymentMethod.tryParse(
-        PaymentsTestGateway.paymentMethodBody(brand: 'MASTERCARD'),
+        PaymentsTestCards.methodJson(brand: 'MASTERCARD'),
       );
       expect(mastercard!.displayBrand, 'Mastercard');
 
@@ -112,7 +112,7 @@ void main() {
     const validNow = null;
 
     test('accepts a well-formed card', () {
-      final draft = PaymentsTestGateway.draft();
+      final draft = PaymentsTestCards.draft();
 
       expect(draft.validate(now: DateTime(2026, 1, 1)), isEmpty);
       final entry = draft.toEntry(now: DateTime(2026, 1, 1));
@@ -120,11 +120,10 @@ void main() {
       expect(entry!.number, '4111111111111111');
       expect(entry.last4, '1111');
       expect(entry.brand, CardBrand.visa);
-      expect(entry.expirationYyMm, '3012');
     });
 
     test('rejects a number that fails the Luhn checksum', () {
-      final draft = PaymentsTestGateway.draft(number: '4111 1111 1111 1112');
+      final draft = PaymentsTestCards.draft(number: '4111 1111 1111 1112');
 
       expect(
         draft.validate(now: DateTime(2026, 1, 1))[CardField.number],
@@ -135,7 +134,7 @@ void main() {
 
     test('rejects a number the network does not issue at that length', () {
       // Luhn-valid but only 15 digits, which Visa does not issue.
-      final draft = PaymentsTestGateway.draft(number: '411111111111116');
+      final draft = PaymentsTestCards.draft(number: '411111111111116');
 
       expect(
         draft.validate(now: DateTime(2026, 1, 1))[CardField.number],
@@ -145,30 +144,30 @@ void main() {
 
     test('reports an expired card and an impossible month separately', () {
       expect(
-        PaymentsTestGateway.draft(expiry: '12/24')
+        PaymentsTestCards.draft(expiry: '12/24')
             .validate(now: DateTime(2026, 1, 1))[CardField.expiry],
         'Esta tarjeta ya venció.',
       );
       expect(
-        PaymentsTestGateway.draft(expiry: '13/30')
+        PaymentsTestCards.draft(expiry: '13/30')
             .validate(now: DateTime(2026, 1, 1))[CardField.expiry],
         'El mes debe estar entre 01 y 12.',
       );
       expect(
-        PaymentsTestGateway.draft(expiry: '1')
+        PaymentsTestCards.draft(expiry: '1')
             .validate(now: DateTime(2026, 1, 1))[CardField.expiry],
         'Usa el formato MM/AA.',
       );
     });
 
     test('asks for the security code the brand actually uses', () {
-      final visa = PaymentsTestGateway.draft(securityCode: '12');
+      final visa = PaymentsTestCards.draft(securityCode: '12');
       expect(
         visa.validate(now: DateTime(2026, 1, 1))[CardField.securityCode],
         'El CVV tiene 3 dígitos.',
       );
 
-      final amex = PaymentsTestGateway.draft(
+      final amex = PaymentsTestCards.draft(
         number: '3782 822463 10005',
         securityCode: '123',
       );
@@ -180,7 +179,7 @@ void main() {
 
     test('requires a cardholder name', () {
       expect(
-        PaymentsTestGateway.draft(holder: 'A')
+        PaymentsTestCards.draft(holder: 'A')
             .validate(now: DateTime(2026, 1, 1))[CardField.holder],
         isNotNull,
       );
@@ -194,7 +193,7 @@ void main() {
     });
 
     test('never prints the card it holds', () {
-      final draft = PaymentsTestGateway.draft();
+      final draft = PaymentsTestCards.draft();
       final entry = draft.toEntry(now: DateTime(2026, 1, 1))!;
 
       expect(draft.toString(), isNot(contains('4111')));

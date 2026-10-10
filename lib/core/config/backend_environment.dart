@@ -1,6 +1,5 @@
 import 'package:flutter/foundation.dart';
 
-import 'payment_gateway_environment.dart';
 
 /// Where trips come from: the local simulation (today's prototype) or a Fluir
 /// backend reached over HTTP + realtime.
@@ -229,7 +228,4 @@ abstract final class BackendEnvironment {
         verificationCode: _demoOtp,
         isReleaseBuild: kReleaseMode,
       );
-
-  /// PAYMENT_MODE keeps its existing key and parser until the payment phase.
-  static PaymentGatewayMode get paymentMode => PaymentGatewayEnvironment.mode;
 }

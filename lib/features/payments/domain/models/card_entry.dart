@@ -146,11 +146,6 @@ class CardEntry {
 
   String get last4 => number.substring(number.length - 4);
 
-  /// `YYMM`, the expiration format AZUL expects.
-  String get expirationYyMm =>
-      '${(expiryYear % 100).toString().padLeft(2, '0')}'
-      '${expiryMonth.toString().padLeft(2, '0')}';
-
   /// Deliberately masked: this value can end up in logs or error reports.
   @override
   String toString() => 'CardEntry(${brand.code} ••••$last4)';

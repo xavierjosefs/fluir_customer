@@ -2,20 +2,11 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../domain/models/payment_method.dart';
-import '../../domain/payment_gateway_exception.dart';
+import '../../domain/payment_vault_exception.dart';
 import '../../domain/repositories/payment_method_repository.dart';
 import '../payments_providers.dart';
 
-enum PaymentMethodsStatus {
-  loading,
-  ready,
-  error,
-
-  /// The gateway refused to list the saved cards, but this build may still
-  /// start a card setup. No card is shown and the wallet is not claimed to be
-  /// empty: the app simply does not know what is stored.
-  listingUnavailable,
-}
+enum PaymentMethodsStatus { loading, ready, error }
 
 @immutable
 class PaymentMethodsState {
@@ -106,9 +97,9 @@ class PaymentMethodsController extends Notifier<PaymentMethodsState> {
     state = state.copyWith(busyMethodId: paymentMethodId, clearError: true);
     try {
       await action();
-    } on PaymentGatewayException catch (error) {
+    } on PaymentVaultException catch (error) {
       if (!ref.mounted) return;
-      if (error.failure == PaymentGatewayFailure.notFound) {
+      if (error.failure == PaymentVaultFailure.notFound) {
         // The gateway no longer knows this card, so the list on screen is
         // stale. Re-read it first, then explain what happened.
         await _readMethods();
@@ -136,32 +127,20 @@ class PaymentMethodsController extends Notifier<PaymentMethodsState> {
         clearError: true,
         clearBusy: true,
       );
-    } on PaymentGatewayException catch (error) {
+    } on PaymentVaultException catch (error) {
       if (!ref.mounted) return;
-      // The multi-card API is internal-only, so a local sandbox build is
-      // refused the listing while it can still start a card setup. Degrade
-      // instead of blocking — but never invent cards and never claim the
-      // wallet is empty.
-      final canStillAddCard =
-          error.failure == PaymentGatewayFailure.unauthorized &&
-          ref.read(canAddCardWithoutListingProvider);
+      // A wallet that cannot be read is never presented as an empty one.
       state = state.copyWith(
-        status: canStillAddCard
-            ? PaymentMethodsStatus.listingUnavailable
-            : PaymentMethodsStatus.error,
+        status: PaymentMethodsStatus.error,
         methods: const [],
-        errorMessage: canStillAddCard
-            ? 'No pudimos consultar tus tarjetas guardadas: el listado '
-                  'necesita el backend autenticado de Fluir. Aún puedes '
-                  'agregar una tarjeta nueva.'
-            : error.message,
+        errorMessage: error.message,
         isRecoverable: error.isRecoverable,
         clearBusy: true,
       );
     }
   }
 
-  /// The default card leads; the rest keep the gateway order.
+  /// The default card leads; the rest keep the vault's order.
   static List<PaymentMethod> _sorted(List<PaymentMethod> methods) {
     final sorted = [...methods];
     sorted.sort((a, b) {

@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../domain/models/card_entry.dart';
 import '../../domain/models/payment_method.dart';
-import '../../domain/payment_gateway_exception.dart';
+import '../../domain/payment_vault_exception.dart';
 import '../payments_providers.dart';
 
 /// Where the customer is while registering a card in the app.
@@ -133,7 +133,7 @@ class AddCardController extends Notifier<AddCardState> {
         draft: const CardEntryDraft(),
         message: 'Tu ${saved.displayBrand} quedó lista para usarse.',
       );
-    } on PaymentGatewayException catch (error) {
+    } on PaymentVaultException catch (error) {
       if (!ref.mounted) return;
       state = state.copyWith(
         stage: AddCardStage.failed,

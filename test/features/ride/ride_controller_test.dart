@@ -77,7 +77,7 @@ final _remote = BackendConfiguration.resolve(
       tripRepositoryProvider.overrideWithValue(trips),
       directionsRepositoryProvider.overrideWithValue(_Directions()),
       customerSessionProvider.overrideWith(() => _Session(session)),
-      simulatedCardVaultProvider.overrideWith(
+      cardVaultProvider.overrideWith(
         (ref) => LocalCardVault(
           store: InMemoryCardVaultStore(const []),
           latency: Duration.zero,

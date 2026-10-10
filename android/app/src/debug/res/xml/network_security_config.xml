@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  Debug only. The local Fluir API Gateway runs over plain HTTP on the Android
+  Debug only. A local Fluir backend runs over plain HTTP on the Android
   emulator loopback alias (10.0.2.2). Release builds never include this file and
   keep Android's default cleartext restrictions.
 -->

@@ -5,8 +5,8 @@
          to allow setting breakpoints, to provide hot reload, etc.
     -->
     <uses-permission android:name="android.permission.INTERNET"/>
-    <!-- Debug-only: lets the emulator reach the local Fluir API Gateway over
-         plain HTTP (10.0.2.2). Not merged into release builds. -->
+    <!-- Debug-only: lets the emulator reach a local Fluir backend over plain
+         HTTP (10.0.2.2). Not merged into release builds. -->
     <application
         android:networkSecurityConfig="@xml/network_security_config"
         tools:replace="android:networkSecurityConfig" />

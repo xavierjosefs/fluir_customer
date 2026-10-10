@@ -43,7 +43,7 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
-          simulatedCardVaultProvider.overrideWith(
+          cardVaultProvider.overrideWith(
             (ref) => LocalCardVault(
               store: InMemoryCardVaultStore(wallet),
               latency: Duration.zero,

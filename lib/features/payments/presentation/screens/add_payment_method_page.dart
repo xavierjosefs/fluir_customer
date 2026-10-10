@@ -201,11 +201,8 @@ class _AddPaymentMethodPageState extends ConsumerState<AddPaymentMethodPage> {
             ],
             const SizedBox(height: AppSpacing.md),
             const _SecurityNote(),
-            if (ref.watch(paymentWalletModeProvider) ==
-                PaymentWalletMode.simulated) ...[
-              const SizedBox(height: AppSpacing.xs),
-              const _SimulatedVaultNote(),
-            ],
+            const SizedBox(height: AppSpacing.xs),
+            const _SimulatedVaultNote(),
           ],
         ),
       ),
@@ -311,8 +308,8 @@ class _SimulatedVaultNote extends StatelessWidget {
       const SizedBox(width: AppSpacing.xs),
       Expanded(
         child: Text(
-          'Modo demostración: la tarjeta se tokeniza en el dispositivo. No se '
-          'envía a AZUL ni se realiza ningún cargo.',
+          'Modo demostración: la tarjeta se tokeniza en este dispositivo y '
+          'no se realiza ningún cargo.',
           style: Theme.of(context).textTheme.bodySmall
               ?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant),
         ),
